@@ -1217,7 +1217,6 @@ class Image(CL):
         image_desc: A 10-tuple containing the values of a cl_image_desc struct.
         host_array: host array reference, such as numpy array,
                     will be stored only if flags include CL_MEM_USE_HOST_PTR.
-        size: size of the host array.
         _n_refs: reference count as a workaround for possible
                  incorrect destructor call order, see
                  http://bugs.python.org/issue23720
@@ -1276,12 +1275,12 @@ class Image(CL):
         """
         return self._host_array
 
-    @property
-    def size(self):
-        """
-        Size of the host array.
-        """
-        return self._size
+    # @property
+    # def size(self):
+    #     """
+    #     Size of the host array.
+    #     """
+    #     return self._size
 
     def _release(self):
         if self.handle is not None:
@@ -1953,6 +1952,22 @@ class Context(CL):
             Buffer object.
         """
         return Buffer(self, flags, host_array, size)
+
+    def create_image(self, flags, image_format, image_desc, host_array=None):
+        """Creates Image object based on host_array.
+
+        Parameters:
+            flags: flags supplied for the creation of this image.
+            image_format: A 2-tuple of integers.
+                        (image_channel_order, image_channel_data_type)
+            image_desc: A 10-tuple containing the values of a cl_image_desc struct.
+            host_array: host array reference, such as numpy array,
+                        will be stored only if flags include CL_MEM_USE_HOST_PTR.
+
+        Returns:
+            Image object.
+        """
+        return Image(self, flags, image_format, image_desc, host_array=None)
 
     def create_program(self, src, include_dirs=(), options="", devices=None,
                        binary=False):
