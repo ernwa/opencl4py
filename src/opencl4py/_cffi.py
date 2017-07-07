@@ -106,13 +106,6 @@ def _initialize(backends):
     typedef cl_bitfield         cl_sampler_properties;
     typedef cl_uint             cl_kernel_exec_info;
 
-    typedef cl_uint     cl_gl_object_type;
-    typedef cl_uint     cl_gl_texture_info;
-    typedef cl_uint     cl_gl_platform_info;
-    typedef unsigned int cl_GLuint;
-    typedef cl_uint     cl_gl_context_info;
-
-
     typedef void* cl_platform_id;
     typedef void* cl_device_id;
     typedef void* cl_context;
@@ -122,9 +115,6 @@ def _initialize(backends):
     typedef void* cl_mem;
     typedef void* cl_event;
     typedef void* cl_sampler;
-
-    typedef intptr_t cl_context_properties;
-    typedef intptr_t cl_pipe_properties;
 
     typedef struct _cl_image_format {
         cl_uint        image_channel_order;
@@ -529,6 +519,20 @@ cl_int clEnqueueCopyBufferToImage(cl_command_queue command_queue,
                            cl_event * event);
 
 /* OPENGL INTEROP! */
+    typedef int          cl_GLint;
+    typedef unsigned int cl_GLenum;
+    typedef unsigned int cl_GLuint;
+    typedef cl_uint     cl_gl_object_type;
+    typedef cl_uint     cl_gl_texture_info;
+    typedef cl_uint     cl_gl_platform_info;
+    typedef cl_uint     cl_gl_context_info;
+
+
+cl_int clGetGLContextInfoKHR(const cl_context_properties * properties,
+                      cl_gl_context_info            param_name,
+                      size_t                        param_value_size,
+                      void *                        param_value,
+                      size_t *                       param_value_size_ret);
 
 
 cl_mem clCreateFromGLBuffer(cl_context     context,

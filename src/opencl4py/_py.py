@@ -127,6 +127,17 @@ class CL(object):
         self._lib = cl.lib  # to hold the reference
         self._handle = None
 
+    def check_error(self, err, funcname):
+        if err:
+            try:
+                self._handle = None
+#                self._del_ref(self)     # shouldn't these both be here
+            except AttributeError:
+                pass
+            raise CLRuntimeError(
+                "%s() failed with error %s" %
+                ( funcname, CL.get_error_description(err)), err )
+
     @property
     def handle(self):
         """Returns cffi handle to OpenCL object.
@@ -210,9 +221,7 @@ class Event(CL):
         """
         wait_list, n_events = CL.get_wait_list(wait_for)
         n = lib.clWaitForEvents(n_events, wait_list)
-        if n:
-            raise CLRuntimeError("clWaitForEvents() failed with "
-                                 "error %s" % CL.get_error_description(n), n)
+        CL.check_error(None, n, 'clWaitForEvents')
 
     def wait(self):
         """Waits on this event.
@@ -250,11 +259,7 @@ class Event(CL):
         self.profiling_errors = errs
         if raise_exception:
             for err in errs.values():
-                if not err:
-                    continue
-                raise CLRuntimeError(
-                    "clGetEventProfilingInfo() failed with "
-                    "error %s" % CL.get_error_description(err), err)
+                self.check_error(err, 'clGetEventProfilingInfo')
         return (vles, errs)
 
     def _release(self):
@@ -304,11 +309,7 @@ class Queue(CL):
                     props[i * 2 + 1] = kv[1]
             self._handle = self._lib.clCreateCommandQueueWithProperties(
                 context.handle, device.handle, props, err)
-        if err[0]:
-            self._handle = None
-            raise CLRuntimeError("%s() failed with error %s" %
-                                 (fnme, CL.get_error_description(err[0])),
-                                 err[0])
+        self.check_error(err[0], fnme)
 
     @property
     def context(self):
@@ -366,9 +367,7 @@ class Queue(CL):
         n = self._lib.clEnqueueNDRangeKernel(
             self.handle, kernel.handle, n_dims, global_work_offset,
             global_work_size, local_work_size, n_events, wait_list, event)
-        if n:
-            raise CLRuntimeError("clEnqueueNDRangeKernel() failed with "
-                                 "error %s" % CL.get_error_description(n), n)
+        self.check_error(n, "clEnqueueNDRangeKernel")
         return Event(event[0]) if event != cl.ffi.NULL else None
 
 
@@ -413,9 +412,7 @@ class Queue(CL):
             self.handle, image.handle, blocking, flags, origin_struct, region_struct,
             row_pitch, slice_pitch, n_events, wait_list, event, err)
 
-        if err[0]:
-            raise CLRuntimeError("clEnqueueMapImage() failed with error %s" %
-                                 CL.get_error_description(err[0]), err[0])
+        self.check_error(err[0], "clEnqueueMapImage")
 
         return (None if event == cl.ffi.NULL else Event(event[0]),
                 int(cl.ffi.cast("size_t", ptr)),
@@ -446,9 +443,7 @@ class Queue(CL):
         ptr = self._lib.clEnqueueMapBuffer(
             self.handle, buf.handle, blocking, flags, offset, size,
             n_events, wait_list, event, err)
-        if err[0]:
-            raise CLRuntimeError("clEnqueueMapBuffer() failed with error %s" %
-                                 CL.get_error_description(err[0]), err[0])
+        self.check_error(err[0], "clEnqueueMapBuffer")
         return (None if event == cl.ffi.NULL else Event(event[0]),
                 int(cl.ffi.cast("size_t", ptr)))
 
@@ -470,9 +465,7 @@ class Queue(CL):
         n = self._lib.clEnqueueUnmapMemObject(
             self.handle, buf.handle, cl.ffi.cast("void*", ptr),
             n_events, wait_list, event)
-        if n:
-            raise CLRuntimeError("clEnqueueUnmapMemObject() failed with "
-                                 "error %s" % CL.get_error_description(n), n)
+        self.check_error(n, "clEnqueueUnmapMemObject")
         return Event(event[0]) if event != cl.ffi.NULL else None
 
     unmap = unmap_buffer
@@ -500,9 +493,7 @@ class Queue(CL):
         n = self._lib.clEnqueueReadBuffer(
             self.handle, buf.handle, blocking, offset, size, host_ptr,
             n_events, wait_list, event)
-        if n:
-            raise CLRuntimeError("clEnqueueReadBuffer() failed with "
-                                 "error %s" % CL.get_error_description(n), n)
+        self.check_error(n, "clEnqueueReadBuffer")
         return Event(event[0]) if event != cl.ffi.NULL else None
 
 
@@ -546,9 +537,7 @@ class Queue(CL):
             self.handle, image.handle, blocking, origin_struct, region_struct,
             src_row_pitch, src_slice_pitch, host_ptr, n_events, wait_list, event)
 
-        if n:
-            raise CLRuntimeError("clEnqueueReadImage() failed with error %s" %
-                                 CL.get_error_description(n), n)
+        self.check_error(n, "clEnqueueReadImage")
 
         return None if event == cl.ffi.NULL else Event(event[0])
 
@@ -575,9 +564,7 @@ class Queue(CL):
         n = self._lib.clEnqueueWriteBuffer(
             self.handle, buf.handle, blocking, offset, size, host_ptr,
             n_events, wait_list, event)
-        if n:
-            raise CLRuntimeError("clEnqueueWriteBuffer() failed with "
-                                 "error %s" % CL.get_error_description(n), n)
+        self.check_error(n, "clEnqueueWriteBuffer")
         return Event(event[0]) if event != cl.ffi.NULL else None
 
 
@@ -621,9 +608,7 @@ class Queue(CL):
             self.handle, image.handle, blocking, origin_struct, region_struct,
             src_row_pitch, src_slice_pitch, host_ptr, n_events, wait_list, event)
 
-        if n:
-            raise CLRuntimeError("clEnqueueWriteImage() failed with error %s" %
-                                 CL.get_error_description(n), n)
+        self.check_error(n, "clEnqueueWriteImage")
 
         return None if event == cl.ffi.NULL else Event(event[0])
 
@@ -664,9 +649,7 @@ class Queue(CL):
             self.handle, image.handle, ptr_pattern, origin_struct, region_struct,
             n_events, wait_list, event)
 
-        if n:
-            raise CLRuntimeError("clEnqueueFillImage() failed with error %s" %
-                                 CL.get_error_description(n), n)
+        self.check_error(n, "clEnqueueFillImage")
 
         return None if event == cl.ffi.NULL else Event(event[0])
 
@@ -697,9 +680,7 @@ class Queue(CL):
         n = self._lib.clEnqueueCopyBuffer(
             self.handle, src.handle, dst.handle, src_offset, dst_offset, size,
             n_events, wait_list, event)
-        if n:
-            raise CLRuntimeError("clEnqueueCopyBuffer() failed with "
-                                 "error %s" % CL.get_error_description(n), n)
+        self.check_error(n, "clEnqueueCopyBuffer")
         return Event(event[0]) if event != cl.ffi.NULL else None
 
 
@@ -746,9 +727,7 @@ class Queue(CL):
             src_row_pitch, src_slice_pitch,
             dst_row_pitch, dst_slice_pitch,
             n_events, wait_list, event)
-        if n:
-            raise CLRuntimeError("clEnqueueCopyBufferRect() failed with "
-                                 "error %s" % CL.get_error_description(n), n)
+        self.check_error(n, "clEnqueueCopyBufferRect")
         return Event(event[0]) if event != cl.ffi.NULL else None
 
 
@@ -792,9 +771,7 @@ class Queue(CL):
             src_origin_struct, dst_origin_struct, region_struct,
             n_events, wait_list, event)
 
-        if n:
-            raise CLRuntimeError("clEnqueueCopyImage() failed with error %s" %
-                                 CL.get_error_description(n), n)
+        self.check_error(n, "clEnqueueCopyImage")
 
         return None if event == cl.ffi.NULL else Event(event[0])
 
@@ -835,9 +812,7 @@ class Queue(CL):
             src_origin_struct, region_struct, dst_offset,
             n_events, wait_list, event)
 
-        if n:
-            raise CLRuntimeError("clEnqueueCopyImageToBuffer() failed with error %s" %
-                                 CL.get_error_description(n), n)
+        self.check_error(n, "clEnqueueCopyImageToBuffer")
 
         return None if event == cl.ffi.NULL else Event(event[0])
 
@@ -878,9 +853,7 @@ class Queue(CL):
             src_offset, dst_origin_struct, region_struct,
             n_events, wait_list, event)
 
-        if n:
-            raise CLRuntimeError("clEnqueueCopyBufferToImage() failed with error %s" %
-                                 CL.get_error_description(n), n)
+        self.check_error(n, "clEnqueueCopyBufferToImage")
 
         return None if event == cl.ffi.NULL else Event(event[0])
 
@@ -913,9 +886,7 @@ class Queue(CL):
         n = self._lib.clEnqueueFillBuffer(
             self.handle, buffer.handle, pattern, pattern_size, offset, size,
             n_events, wait_list, event)
-        if n:
-            raise CLRuntimeError("clEnqueueFillBuffer() failed with "
-                                 "error %s" % CL.get_error_description(n), n)
+        self.check_error(n, "clEnqueueFillBuffer")
         return Event(event[0]) if event != cl.ffi.NULL else None
 
 
@@ -944,9 +915,7 @@ class Queue(CL):
         err = self._lib.clEnqueueSVMMap(
             self.handle, blocking, flags, ptr, size,
             n_events, wait_list, event)
-        if err:
-            raise CLRuntimeError("clEnqueueSVMMap() failed with error %s" %
-                                 CL.get_error_description(err), err)
+        self.check_error(err, "clEnqueueSVMMap")
         return None if event == cl.ffi.NULL else Event(event[0])
 
 
@@ -997,9 +966,7 @@ class Queue(CL):
         src, _ = CL.extract_ptr_and_size(src, 0)
         n = self._lib.clEnqueueSVMMemcpy(
             self.handle, blocking, dst, src, size, n_events, wait_list, event)
-        if n:
-            raise CLRuntimeError("clEnqueueSVMMemcpy() failed with "
-                                 "error %s" % CL.get_error_description(n), n)
+        self.check_error(n, "clEnqueueSVMMemcpy")
         return Event(event[0]) if event != cl.ffi.NULL else None
 
 
@@ -1031,9 +998,7 @@ class Queue(CL):
         n = self._lib.clEnqueueSVMMemFill(
             self.handle, ptr, pattern, pattern_size, size,
             n_events, wait_list, event)
-        if n:
-            raise CLRuntimeError("clEnqueueSVMMemFill() failed with "
-                                 "error %s" % CL.get_error_description(n), n)
+        self.check_error(n, "clEnqueueSVMMemFill")
         return Event(event[0]) if event != cl.ffi.NULL else None
 
 
@@ -1041,17 +1006,13 @@ class Queue(CL):
         """Flushes the queue.
         """
         n = self._lib.clFlush(self.handle)
-        if n:
-            raise CLRuntimeError("clFlush() failed with error %s" %
-                                 CL.get_error_description(n), n)
+        self.check_error(n, "clFlush")
 
     def finish(self):
         """Waits for all previous commands issued to this queue to end.
         """
         n = self._lib.clFinish(self.handle)
-        if n:
-            raise CLRuntimeError("clFinish() failed with error %s" %
-                                 CL.get_error_description(n), n)
+        self.check_error(n, "clFinish")
 
     def _release(self):
         if self.handle is not None:
@@ -1081,8 +1042,8 @@ class Buffer(CL):
                  http://bugs.python.org/issue23720
                  (weakrefs do not help here).
     """
-    def __init__(self, context, flags, host_array, size=None,
-                 parent=None, origin=0):
+
+    def _init_empty(self, context, flags, parent=None):  # __init__ boilerplate
         super(Buffer, self).__init__()
         context._add_ref(self)
         self._n_refs = 1
@@ -1091,6 +1052,11 @@ class Buffer(CL):
             parent._add_ref(self)
         self._context = context
         self._flags = flags
+        return self
+
+    def __init__(self, context, flags, host_array, size=None,
+                 parent=None, origin=0):
+        self._init_empty(context, flags)
         self._host_array = (host_array if flags & cl.CL_MEM_USE_HOST_PTR != 0
                             else None)
         host_ptr, size = CL.extract_ptr_and_size(host_array, size)
@@ -1107,22 +1073,35 @@ class Buffer(CL):
             self._handle = self._lib.clCreateSubBuffer(
                 parent.handle, flags, cl.CL_BUFFER_CREATE_TYPE_REGION,
                 info, err)
-        if err[0]:
-            self._handle = None
-            raise CLRuntimeError(
-                "%s failed with error %s" %
-                ("clCreateBuffer()" if parent is None else "clCreateSubBuffer",
-                 CL.get_error_description(err[0])), err[0])
 
-    def _add_ref(self, obj):
-        self._n_refs += 1
+        self.check_error(err[0], 'clCreateBuffer')
 
-    def _del_ref(self, obj):
-        with cl.lock:
-            self._n_refs -= 1
-            n_refs = self._n_refs
-        if n_refs <= 0:
-            self._release()
+
+    @classmethod
+    def from_gl_buffer(cls, context, flags, bufferobj):
+        """Creates a Buffer from an OpenGL buffer object.
+
+        Parameters:
+            flags: memory access descriptor flags
+            renderbuffer: The name of a GL renderbuffer object.
+                        The renderbuffer storage must be specified before the
+                        image object can be created. The renderbuffer format and
+                        dimensions will be used to create the 2D image object.
+        Returns:
+            Image object.
+        """
+        self = cls.__new__(cls)             # manually construct empty object
+        self._init_empty(context, flags)
+        self._gl_buffer = bufferobj   # host_glbuffer?
+
+        err = cl.ffi.new("cl_int *")
+
+        self._handle = self._lib.clCreateFromGLBuffer(
+            context.handle, flags, bufferobj, err)
+
+        self.check_error(err[0], 'clCreateFromGLBuffer')
+        return self
+
 
     def create_sub_buffer(self, origin, size, flags=0):
         """Creates subbufer from the region of the original buffer.
@@ -1135,6 +1114,19 @@ class Buffer(CL):
         """
         return Buffer(self._context, flags, self._host_array, size,
                       self, origin)
+
+
+    def _add_ref(self, obj):
+        self._n_refs += 1
+
+
+    def _del_ref(self, obj):
+        with cl.lock:
+            self._n_refs -= 1
+            n_refs = self._n_refs
+        if n_refs <= 0:
+            self._release()
+
 
     @property
     def context(self):
@@ -1222,12 +1214,17 @@ class Image(CL):
                  http://bugs.python.org/issue23720
                  (weakrefs do not help here).
     """
-    def __init__(self, context, flags, image_format, image_desc, host_array=None):
+
+    def _init_empty(self, context, flags):  # __init__ boilerplate
         super(Image, self).__init__()
         context._add_ref(self)
         self._n_refs = 1
         self._context = context
         self._flags = flags
+        return self
+
+    def __init__(self, context, flags, image_format, image_desc, host_array=None):
+        self._init_empty(context, flags)
         self._host_array = (host_array if flags & cl.CL_MEM_USE_HOST_PTR != 0
                             else None)
         host_ptr = CL.extract_ptr(host_array)
@@ -1237,11 +1234,60 @@ class Image(CL):
         err = cl.ffi.new("cl_int *")
         self._handle = self._lib.clCreateImage(
             context.handle, flags, self.image_format, self.image_desc, host_ptr, err)
-        if err[0]:
-            self._handle = None
-            raise CLRuntimeError(
-                "clCreateImage() failed with error %s" %
-                ( CL.get_error_description(err[0])), err[0])
+        self.check_error(err[0], 'clCreateImage')
+
+
+    @classmethod
+    def from_gl_renderbuffer(cls, context, flags, renderbuffer):
+        """Creates a 2D Image from an OpenGL renderbuffer object.
+
+        Parameters:
+            flags: memory access descriptor flags
+            renderbuffer: The name of a GL renderbuffer object.
+                        The renderbuffer storage must be specified before the
+                        image object can be created. The renderbuffer format and
+                        dimensions will be used to create the 2D image object.
+        Returns:
+            Image object.
+        """
+        self = cls.__new__(cls)             # manually construct empty object
+        self._init_empty(context, flags)
+        self._host_renderbuffer = renderbuffer   # host_glbuffer?
+
+        err = cl.ffi.new("cl_int *")
+
+        self._handle = self._lib.clCreateFromGLRenderbuffer(
+            context.handle, flags, renderbuffer, err)
+
+        self.check_error(err[0], 'clCreateFromGLRenderbuffer')
+        return self
+
+
+    @classmethod
+    def from_gl_texture(cls, context, flags, texture_target, miplevel, texture):
+        """Creates a 2D Image from an OpenGL texture object.
+
+        Parameters:
+            flags: memory access descriptor flags.
+            texture_target: image type of texture.
+            miplevel: mipmap level to be used. Usually 0.
+            texture: The name of a GL texture object.
+                        Can be 1D, 2D, 3D, 1D array, 2D array, cubemap, rectangle
+                        or buffer texture object. Must be a complete texture.
+        Returns:
+            Image object.
+        """
+        self = cls.__new__(cls)             # manually construct empty object
+        self._init_empty(context, flags)
+        self._host_texture = texture        # host_glbuffer?
+
+        err = cl.ffi.new("cl_int *")
+
+        self._handle = self._lib.clCreateFromGLTexture(
+            context.handle, flags, texture_target, miplevel, texture, err)
+
+        self.check_error(err[0], 'clCreateFromGLTexture')
+
 
     def _add_ref(self, obj):
         self._n_refs += 1
@@ -1470,11 +1516,7 @@ class Kernel(CL):
                              "numpy array, cffi pointer or None "
                              "in Kernel::set_arg()")
         n = self._lib.clSetKernelArg(self.handle, idx, arg_size, arg_value)
-        if n:
-            raise CLRuntimeError("clSetKernelArg(%d, %s) failed with error "
-                                 "%s" % (idx, repr(vle),
-                                         CL.get_error_description(n)),
-                                 n)
+        self.check_error(n, "clSetKernelArg")
 
     def set_arg_svm(self, idx, svm_ptr):
         """Sets SVM pointer as the kernel argument.
@@ -1517,9 +1559,7 @@ class Kernel(CL):
         sz = cl.ffi.new("size_t *")
         err = self._lib.clGetKernelInfo(
             self.handle, code, cl.ffi.sizeof(buf), buf, sz)
-        if err:
-            raise CLRuntimeError("clGetKernelInfo() failed with error %s" %
-                                 CL.get_error_description(err), err)
+        self.check_error(err, "clGetKernelInfo")
         return sz[0]
 
     def __del__(self):
@@ -1644,9 +1684,7 @@ class Program(CL):
         sz = cl.ffi.new("size_t *")
         err = self._lib.clGetProgramInfo(self.handle, code,
                                          cl.ffi.sizeof(buf), buf, sz)
-        if err:
-            raise CLRuntimeError("clGetProgramInfo() failed with error %s" %
-                                 CL.get_error_description(err), err)
+        self.check_error(err, "clGetProgramInfo")
         return sz[0]
 
     def _get_build_logs(self, device_list):
@@ -1671,11 +1709,8 @@ class Program(CL):
         self._handle = self._lib.clCreateProgramWithSource(
             self.context.handle, 1, strings, cl.ffi.NULL, err)
         del srcptr
-        if err[0]:
-            self._handle = None
-            raise CLRuntimeError("clCreateProgramWithSource() failed with "
-                                 "error %s" %
-                                 CL.get_error_description(err[0]), err[0])
+        self.check_error(err[0], "clCreateProgramWithSource")
+
         options = self.options.decode("utf-8")
         for dirnme in self.include_dirs:
             if not len(dirnme):
@@ -1734,12 +1769,7 @@ class Program(CL):
                                        self.options, cl.ffi.NULL, cl.ffi.NULL)
         del binaries_ref
         self._get_build_logs(device_list)
-        if err:
-            raise CLRuntimeError("clBuildProgram() failed with error %s.\n"
-                                 "Logs are:\n%s" % (
-                                     CL.get_error_description(err),
-                                     "\n".join(self.build_logs)),
-                                 err)
+        self.check_error(err, "clBuildProgram")
 
     def _release(self):
         if self.handle is not None:
@@ -1776,10 +1806,7 @@ class Pipe(CL):
         err = cl.ffi.new("cl_int *")
         self._handle = self._lib.clCreatePipe(
             context.handle, flags, packet_size, max_packets, cl.ffi.NULL, err)
-        if err[0]:
-            self._handle = None
-            raise CLRuntimeError("clCreatePipe() failed with error %s" %
-                                 CL.get_error_description(err[0]), err[0])
+        self.check_error(err[0], "clCreatePipe")
 
     @property
     def context(self):
@@ -1881,27 +1908,52 @@ class Context(CL):
                  http://bugs.python.org/issue23720
                  (weakrefs do not help here).
     """
-    def __init__(self, platform, devices):
+    @staticmethod
+    def _properties_list(*args):
+        args = tuple(args) + (0,)   # list terminator
+        pobj = cl.ffi.new("cl_context_properties[]",len(args))
+        for i, a in enumerate(args):
+            pobj[i] = cl.ffi.cast("cl_context_properties", a)
+        return pobj
+
+    def __init__(self, platform, devices=None, gl_context=None, gl_context_type=cl.CL_GL_CONTEXT_KHR):
         super(Context, self).__init__()
         self._n_refs = 1
         self._platform = platform
         self._devices = devices
-        props = cl.ffi.new("cl_context_properties[]", 3)
-        props[0] = cl.CL_CONTEXT_PLATFORM
-        props[1] = cl.ffi.cast("cl_context_properties", platform.handle)
-        props[2] = 0
+
+        plist = [cl.CL_CONTEXT_PLATFORM, platform.handle]
+        if gl_context:
+            plist += [gl_context_type, gl_context]
+
+        if not devices:
+            gl_ctx_props = Context._properties_list(gl_context_type, gl_context)
+            print 'attempting to create cl context from gl context'
+
+            sizeof_device_id = cl.ffi.sizeof("cl_device_id")
+            gl_device_id = cl.ffi.new("cl_device_id *")
+            size_ret = cl.ffi.new("size_t *")
+
+            status = self._lib.clGetGLContextInfoKHR( gl_ctx_props,
+                    cl.CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR,
+                    sizeof_device_id, gl_device_id, size_ret)
+            self.check_error(status, "clGetGLContextInfoKHR")
+            assert size_ret[0] == sizeof_device_id
+
+            print "GL context's device ID is:", gl_device_id
+            device_list = cl.ffi.new("cl_device_id*", gl_device_id)
+        else:
+            n_devices = len(devices)
+            device_list = cl.ffi.new("cl_device_id[]", n_devices)
+            for i, dev in enumerate(devices):
+                device_list[i] = dev.handle
+
+        new_ctx_props = Context._properties_list(*plist)
+
         err = cl.ffi.new("cl_int *")
-        n_devices = len(devices)
-        device_list = cl.ffi.new("cl_device_id[]", n_devices)
-        for i, dev in enumerate(devices):
-            device_list[i] = dev.handle
         self._handle = self._lib.clCreateContext(
-            props, n_devices, device_list, cl.ffi.NULL, cl.ffi.NULL, err)
-        if err[0]:
-            self._handle = None
-            raise CLRuntimeError("clCreateContext() failed with error %s" %
-                                 CL.get_error_description(err[0]),
-                                 err[0])
+            new_ctx_props, n_devices, device_list, cl.ffi.NULL, cl.ffi.NULL, err)
+        self.check_error(err[0], "clCreateContext")
 
     def _add_ref(self, obj):
         self._n_refs += 1
@@ -1968,6 +2020,22 @@ class Context(CL):
             Image object.
         """
         return Image(self, flags, image_format, image_desc, host_array=None)
+
+    def create_from_gl_renderbuffer(self, flags, renderbuffer):
+        """Creates an OpenCL 2D image object from an OpenGL renderbuffer object.
+
+        Parameters:
+            flags: memory access descriptor flags
+            renderbuffer: The name of a GL renderbuffer object.
+                        The renderbuffer storage must be specified before the
+                        image object can be created. The renderbuffer format and
+                        dimensions will be used to create the 2D image object.
+        Returns:
+            Image object.
+        """
+
+        return Image.from_gl_renderbuffer(self, flags, renderbuffer)
+
 
     def create_program(self, src, include_dirs=(), options="", devices=None,
                        binary=False):
@@ -2387,27 +2455,21 @@ class Device(CL):
         value = cl.ffi.new("cl_bool[]", 1)
         err = self._lib.clGetDeviceInfo(
             self._handle, name, cl.ffi.sizeof(value), value, cl.ffi.NULL)
-        if err:
-            raise CLRuntimeError("clGetDeviceInfo(%d) failed with error %s" %
-                                 (name, CL.get_error_description(err)), err)
+        self.check_error(err, "clGetDeviceInfo")
         return bool(value[0])
 
     def _get_device_info_int(self, name):
         value = cl.ffi.new("uint64_t[]", 1)
         err = self._lib.clGetDeviceInfo(
             self._handle, name, cl.ffi.sizeof(value), value, cl.ffi.NULL)
-        if err:
-            raise CLRuntimeError("clGetDeviceInfo(%d) failed with error %s" %
-                                 (name, CL.get_error_description(err)), err)
+        self.check_error(err, "clGetDeviceInfo")
         return int(value[0])
 
     def _get_device_info_str(self, name):
         value = cl.ffi.new("char[]", 1024)
         err = self._lib.clGetDeviceInfo(
             self._handle, name, cl.ffi.sizeof(value), value, cl.ffi.NULL)
-        if err:
-            raise CLRuntimeError("clGetDeviceInfo(%d) failed with error %s" %
-                                 (name, CL.get_error_description(err)), err)
+        self.check_error(err, "clGetDeviceInfo")
         return cl.ffi.string(value).decode("utf-8")
 
     def __repr__(self):
@@ -2437,15 +2499,13 @@ class Platform(CL):
         nn = cl.ffi.new("cl_uint[]", 1)
         n = self._lib.clGetDeviceIDs(handle, cl.CL_DEVICE_TYPE_ALL,
                                      0, cl.ffi.NULL, nn)
-        if n:
-            raise CLRuntimeError("clGetDeviceIDs() failed with error %s" %
-                                 CL.get_error_description(n), n)
+        self.check_error(n, 'clGetDeviceIDs')
+
         ids = cl.ffi.new("cl_device_id[]", nn[0])
         n = self._lib.clGetDeviceIDs(handle, cl.CL_DEVICE_TYPE_ALL,
                                      nn[0], ids, nn)
-        if n:
-            raise CLRuntimeError("clGetDeviceIDs() failed with error %s" %
-                                 CL.get_error_description(n), n)
+        self.check_error(n, 'clGetDeviceIDs')
+
         self._devices = list(Device(dev_id, self,
                                     "%s:%d" % (self.path, dev_num))
                              for dev_id, dev_num in zip(ids, range(len(ids))))
@@ -2500,14 +2560,12 @@ class Platforms(CL):
         super(Platforms, self).__init__()
         nn = cl.ffi.new("cl_uint[]", 1)
         n = self._lib.clGetPlatformIDs(0, cl.ffi.NULL, nn)
-        if n:
-            raise CLRuntimeError("clGetPlatformIDs() failed with error %s" %
-                                 CL.get_error_description(n), n)
+        self.check_error(n, 'clGetPlatformIDs')
+
         ids = cl.ffi.new("cl_platform_id[]", nn[0])
         n = self._lib.clGetPlatformIDs(nn[0], ids, nn)
-        if n:
-            raise CLRuntimeError("clGetPlatformIDs() failed with error %s" %
-                                 CL.get_error_description(n), n)
+        self.check_error(n, 'clGetPlatformIDs')
+
         self._platforms = list(Platform(p_id, str(p_num))
                                for p_id, p_num in zip(ids, range(len(ids))))
 
@@ -2592,5 +2650,5 @@ class Platforms(CL):
             for i in device_numbers:
                 devices.append(platform.devices[i])
         except IndexError:
-            raise IndexError("Devicve index is out of range")
+            raise IndexError("Device index is out of range")
         return platform.create_context(devices)
