@@ -149,6 +149,16 @@ class CL(object):
         return (cl.ffi.NULL if host_ptr is None
                 else cl.ffi.cast("void*", host_ptr), size)
 
+
+    @staticmethod
+    def extract_ptr(host_array):
+        if hasattr(host_array, "__array_interface__"):
+            host_ptr = host_array.__array_interface__["data"][0]
+        else:
+            host_ptr = host_array
+        return cl.ffi.NULL if host_ptr is None else cl.ffi.cast("void*", host_ptr)
+
+
     @staticmethod
     def get_wait_list(wait_for):
         """Returns cffi event list and number of events
@@ -361,6 +371,57 @@ class Queue(CL):
                                  "error %s" % CL.get_error_description(n), n)
         return Event(event[0]) if event != cl.ffi.NULL else None
 
+
+    def map_image(self, image, flags, region,
+                   blocking=True, origin=(0,0),
+                   wait_for=None, need_event=False):
+        """Maps image.
+
+        Parameters:
+            image: Image object.
+            flags: mapping flags.
+            region: (x,y,z) size of mapped image region.
+            blocking: if the call would block until completion.
+            origin: (x,y,z) offset location of mapped image region.
+            wait_for: list of the Event objects to wait.
+            need_event: return Event object or not.
+
+        Returns:
+            (event, ptr, image_row_pitch, image_slice_pitch):
+                    event - Event object or None if need_event == False,
+                    ptr - pointer to the mapped image
+                                (cffi void* converted to int).
+                    image_row_pitch - scan-line pitch in bytes.
+                    image_slice_pitch - size in bytes of each 2D slice.
+        """
+        assert len(origin) == len(region)
+        if len(origin) == 2:
+            origin = tuple(origin) + (0,)
+            region = tuple(region) + (1,)
+
+        origin_struct = cl.ffi.new("size_t[3]", origin)
+        region_struct = cl.ffi.new("size_t[3]", region)
+
+        row_pitch = cl.ffi.new("size_t *")
+        slice_pitch = cl.ffi.new("size_t *")
+
+        err = cl.ffi.new("cl_int *")
+        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        wait_list, n_events = CL.get_wait_list(wait_for)
+
+        ptr = self._lib.clEnqueueMapImage(
+            self.handle, image.handle, blocking, flags, origin_struct, region_struct,
+            row_pitch, slice_pitch, n_events, wait_list, event, err)
+
+        if err[0]:
+            raise CLRuntimeError("clEnqueueMapImage() failed with error %s" %
+                                 CL.get_error_description(err[0]), err[0])
+
+        return (None if event == cl.ffi.NULL else Event(event[0]),
+                int(cl.ffi.cast("size_t", ptr)),
+                int(row_pitch[0]), int(slice_pitch[0]))
+
+
     def map_buffer(self, buf, flags, size, blocking=True, offset=0,
                    wait_for=None, need_event=False):
         """Maps buffer.
@@ -391,6 +452,7 @@ class Queue(CL):
         return (None if event == cl.ffi.NULL else Event(event[0]),
                 int(cl.ffi.cast("size_t", ptr)))
 
+
     def unmap_buffer(self, buf, ptr, wait_for=None, need_event=True):
         """Unmaps previously mapped buffer.
 
@@ -412,6 +474,9 @@ class Queue(CL):
             raise CLRuntimeError("clEnqueueUnmapMemObject() failed with "
                                  "error %s" % CL.get_error_description(n), n)
         return Event(event[0]) if event != cl.ffi.NULL else None
+
+    unmap = unmap_buffer
+
 
     def read_buffer(self, buf, host_array, blocking=True, size=None, offset=0,
                     wait_for=None, need_event=False):
@@ -440,6 +505,54 @@ class Queue(CL):
                                  "error %s" % CL.get_error_description(n), n)
         return Event(event[0]) if event != cl.ffi.NULL else None
 
+
+    def read_image(self, image, host_array, blocking=True,
+                  region=None, origin=(0,0),
+                  src_row_pitch=0, src_slice_pitch=0,
+                   wait_for=None, need_event=False):
+        """Copies from device image to host buffer.
+
+        Parameters:
+            image: Image object.
+            host_array: numpy array. shape will be used.
+            blocking: if the call would block until completion.
+            region: (x,y,z) size of read image region.
+            origin: (x,y,z) offset of read image region.
+            src_row_pitch: bytes between y slices (rows).
+            src_slice_pitch: bytes between z slices.
+            wait_for: list of the Event objects to wait.
+            need_event: return Event object or not.
+
+        Returns:
+            Event object or None if need_event == False,
+        """
+        host_ptr = CL.extract_ptr(host_array)
+
+        if region is None:
+            region = [ max(x, 1) for x in (image.image_desc.image_width,
+                image.image_desc.image_height,
+                image.image_desc.image_depth) ]
+
+        region = tuple(region) + (3-len(region)) * (1,)
+        origin = tuple(origin) + (3-len(origin)) * (0,)
+
+        origin_struct = cl.ffi.new("size_t[3]", origin)
+        region_struct = cl.ffi.new("size_t[3]", region)
+
+        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        wait_list, n_events = CL.get_wait_list(wait_for)
+
+        n = self._lib.clEnqueueReadImage(
+            self.handle, image.handle, blocking, origin_struct, region_struct,
+            src_row_pitch, src_slice_pitch, host_ptr, n_events, wait_list, event)
+
+        if n:
+            raise CLRuntimeError("clEnqueueReadImage() failed with error %s" %
+                                 CL.get_error_description(n), n)
+
+        return None if event == cl.ffi.NULL else Event(event[0])
+
+
     def write_buffer(self, buf, host_array, blocking=True, size=None, offset=0,
                      wait_for=None, need_event=False):
         """Copies from host buffer to device buffer.
@@ -463,11 +576,103 @@ class Queue(CL):
             self.handle, buf.handle, blocking, offset, size, host_ptr,
             n_events, wait_list, event)
         if n:
-            raise CLRuntimeError("clEnqueueReadBuffer() failed with "
+            raise CLRuntimeError("clEnqueueWriteBuffer() failed with "
                                  "error %s" % CL.get_error_description(n), n)
         return Event(event[0]) if event != cl.ffi.NULL else None
 
-    def copy_buffer(self, src, dst, src_offset, dst_offset, size,
+
+    def write_image(self, image, host_array, blocking=True,
+                   region=None, origin=(0,0),
+                   src_row_pitch=0, src_slice_pitch=0,
+                   wait_for=None, need_event=False):
+        """Copies from host buffer to device image.
+
+        Parameters:
+            image: Image object.
+            host_array: numpy array. shape will be used.
+            blocking: if the call would block until completion.
+            region: (x,y,z) size of written image region.
+            origin: (x,y,z) offset of written image region.
+            src_row_pitch: bytes between y slices (rows).
+            src_slice_pitch: bytes between z slices.
+            wait_for: list of the Event objects to wait.
+            need_event: return Event object or not.
+
+        Returns:
+            Event object or None if need_event == False,
+        """
+        host_ptr = CL.extract_ptr(host_array)
+
+        if region is None:
+            region = [ max(x, 1) for x in (image.image_desc.image_width,
+                image.image_desc.image_height,
+                image.image_desc.image_depth) ]
+
+        region = tuple(region) + (3-len(region)) * (1,)
+        origin = tuple(origin) + (3-len(origin)) * (0,)
+
+        origin_struct = cl.ffi.new("size_t[3]", origin)
+        region_struct = cl.ffi.new("size_t[3]", region)
+
+        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        wait_list, n_events = CL.get_wait_list(wait_for)
+
+        n = self._lib.clEnqueueWriteImage(
+            self.handle, image.handle, blocking, origin_struct, region_struct,
+            src_row_pitch, src_slice_pitch, host_ptr, n_events, wait_list, event)
+
+        if n:
+            raise CLRuntimeError("clEnqueueWriteImage() failed with error %s" %
+                                 CL.get_error_description(n), n)
+
+        return None if event == cl.ffi.NULL else Event(event[0])
+
+
+    def fill_image(self, image, fill_color,
+                   origin=(0,0), region=None,
+                   wait_for=None, need_event=False):
+        """Enqueues a command to fill a region of an Image.
+
+        Parameters:
+            image: Image object.
+            fill_color: numpy array that matches image format.
+            origin: (x,y,z) offset of image region to fill.
+            region: (x,y,z) size of image region to fill.
+            wait_for: list of the Event objects to wait.
+            need_event: return Event object or not.
+
+        Returns:
+            Event object or None if need_event == False,
+        """
+        ptr_pattern = CL.extract_ptr(fill_color)
+
+        if region is None:
+            region = [ max(x, 1) for x in (image.image_desc.image_width,
+                image.image_desc.image_height,
+                image.image_desc.image_depth) ]
+
+        region = tuple(region) + (3-len(region)) * (1,)
+        origin = tuple(origin) + (3-len(origin)) * (0,)
+
+        origin_struct = cl.ffi.new("size_t[3]", origin)
+        region_struct = cl.ffi.new("size_t[3]", region)
+
+        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        wait_list, n_events = CL.get_wait_list(wait_for)
+
+        n = self._lib.clEnqueueFillImage(
+            self.handle, image.handle, ptr_pattern, origin_struct, region_struct,
+            n_events, wait_list, event)
+
+        if n:
+            raise CLRuntimeError("clEnqueueFillImage() failed with error %s" %
+                                 CL.get_error_description(n), n)
+
+        return None if event == cl.ffi.NULL else Event(event[0])
+
+
+
+    def copy_buffer(self, src, dst, src_offset=0, dst_offset=0, size=None,
                     wait_for=None, need_event=True):
         """Enqueues a command to copy from one buffer object to another.
 
@@ -483,6 +688,10 @@ class Queue(CL):
         Returns:
             Event object or None if need_event == False.
         """
+        if size is None:    # assume smaller of either size
+            # assert src.size == dst.size, 'buffer sizes must match'
+            size = min(src.size, dst.size)
+
         event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
         n = self._lib.clEnqueueCopyBuffer(
@@ -492,6 +701,7 @@ class Queue(CL):
             raise CLRuntimeError("clEnqueueCopyBuffer() failed with "
                                  "error %s" % CL.get_error_description(n), n)
         return Event(event[0]) if event != cl.ffi.NULL else None
+
 
     def copy_buffer_rect(self, src, dst, src_origin, dst_origin, region,
                          src_row_pitch=0, src_slice_pitch=0,
@@ -541,9 +751,143 @@ class Queue(CL):
                                  "error %s" % CL.get_error_description(n), n)
         return Event(event[0]) if event != cl.ffi.NULL else None
 
-    def fill_buffer(self, buffer, pattern, pattern_size, size, offset=0,
+
+    def copy_image(self, src_image, dst_image,
+                   src_origin=(0,0), dst_origin=(0,0), region=None,
+                   wait_for=None, need_event=False):
+        """Enqueues a command to copy an Image region into another Image.
+
+        Parameters:
+            src_image: Image object to copy from.
+            dst_image: Image object to copy into.
+            src_origin: (x,y,z) offset of image region copied from.
+            src_origin: (x,y,z) offset of image region copied into.
+            region: (x,y,z) size of copied image region.
+            dst_offset: offset into buffer for copy.
+            wait_for: list of the Event objects to wait.
+            need_event: return Event object or not.
+
+        Returns:
+            Event object or None if need_event == False,
+        """
+        src_origin = tuple(src_origin) + (3-len(src_origin)) * (0,)
+        dst_origin = tuple(src_origin) + (3-len(src_origin)) * (0,)
+
+        if region is None:
+            region = [ max(x, 1) for x in (src_image.image_desc.image_width,
+                src_image.image_desc.image_height,
+                src_image.image_desc.image_depth) ]
+
+        region = tuple(region) + (3-len(region)) * (1,)
+
+        src_origin_struct = cl.ffi.new("size_t[3]", src_origin)
+        dst_origin_struct = cl.ffi.new("size_t[3]", dst_origin)
+        region_struct = cl.ffi.new("size_t[3]", region)
+
+        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        wait_list, n_events = CL.get_wait_list(wait_for)
+
+        n = self._lib.clEnqueueCopyImageToBuffer(
+            self.handle, src_image.handle, dst_image.handle,
+            src_origin_struct, dst_origin_struct, region_struct,
+            n_events, wait_list, event)
+
+        if n:
+            raise CLRuntimeError("clEnqueueCopyImage() failed with error %s" %
+                                 CL.get_error_description(n), n)
+
+        return None if event == cl.ffi.NULL else Event(event[0])
+
+
+    def copy_image_to_buffer(self, src_image, dst_buffer,
+                   src_origin=(0,0), region=None, dst_offset=0,
+                   wait_for=None, need_event=False):
+        """Enqueues a command to copy an Image region into a Buffer.
+
+        Parameters:
+            src_image: Image object to copy from.
+            dst_buffer: Buffer object to copy into.
+            src_origin: (x,y,z) offset of copied image region.
+            region: (x,y,z) size of copied image region.
+            dst_offset: offset into buffer for copy.
+            wait_for: list of the Event objects to wait.
+            need_event: return Event object or not.
+
+        Returns:
+            Event object or None if need_event == False,
+        """
+        if region is None:
+            region = [ max(x, 1) for x in (src_image.image_desc.image_width,
+                src_image.image_desc.image_height,
+                src_image.image_desc.image_depth) ]
+
+        region = tuple(region) + (3-len(region)) * (1,)
+        src_origin = tuple(src_origin) + (3-len(src_origin)) * (0,)
+
+        src_origin_struct = cl.ffi.new("size_t[3]", src_origin)
+        region_struct = cl.ffi.new("size_t[3]", region)
+
+        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        wait_list, n_events = CL.get_wait_list(wait_for)
+
+        n = self._lib.clEnqueueCopyImageToBuffer(
+            self.handle, src_image.handle, dst_buffer.handle,
+            src_origin_struct, region_struct, dst_offset,
+            n_events, wait_list, event)
+
+        if n:
+            raise CLRuntimeError("clEnqueueCopyImageToBuffer() failed with error %s" %
+                                 CL.get_error_description(n), n)
+
+        return None if event == cl.ffi.NULL else Event(event[0])
+
+
+    def copy_buffer_to_image(self, src_buffer, dst_image,
+                   src_offset=0, dst_origin=(0,0), region=None,
+                   wait_for=None, need_event=False):
+        """Enqueues a command to copy an Image region into a Buffer.
+
+        Parameters:
+            src_buffer: Buffer object to copy from.
+            dst_image:  Image object to copy to.
+            src_offset: offset into buffer for copy.
+            dst_origin: (x,y,z) offset of written image region.
+            region:     (x,y,z) size of written image region.
+            wait_for:   list of the Event objects to wait.
+            need_event: return Event object or not.
+
+        Returns:
+            Event object or None if need_event == False,
+        """
+        if region is None:
+            region = [ max(x, 1) for x in (dst_image.image_desc.image_width,
+                dst_image.image_desc.image_height,
+                dst_image.image_desc.image_depth) ]
+
+        region = tuple(region) + (3-len(region)) * (1,)
+        dst_origin = tuple(dst_origin) + (3-len(dst_origin)) * (0,)
+
+        dst_origin_struct = cl.ffi.new("size_t[3]", dst_origin)
+        region_struct = cl.ffi.new("size_t[3]", region)
+
+        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        wait_list, n_events = CL.get_wait_list(wait_for)
+
+        n = self._lib.clEnqueueCopyImageToBuffer(
+            self.handle, src_buffer.handle, dst_image.handle,
+            src_offset, dst_origin_struct, region_struct,
+            n_events, wait_list, event)
+
+        if n:
+            raise CLRuntimeError("clEnqueueCopyBufferToImage() failed with error %s" %
+                                 CL.get_error_description(n), n)
+
+        return None if event == cl.ffi.NULL else Event(event[0])
+
+
+    def fill_buffer(self, buffer, pattern, pattern_size=None, size=None, offset=0, # FIXME: calculate size?
                     wait_for=None, need_event=True):
-        """Enqueues a command to copy from one buffer object to another.
+        """Enqueues a command to fill a region of a Buffer.
 
         Parameters:
             buffer: Buffer object.
@@ -560,9 +904,12 @@ class Queue(CL):
         Returns:
             Event object or None if need_event == False.
         """
+        if size is None:
+            size = buffer.size
+
         event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
-        pattern, _ = CL.extract_ptr_and_size(pattern, 0)
+        pattern, pattern_size = CL.extract_ptr_and_size(pattern, pattern_size)
         n = self._lib.clEnqueueFillBuffer(
             self.handle, buffer.handle, pattern, pattern_size, offset, size,
             n_events, wait_list, event)
@@ -570,6 +917,7 @@ class Queue(CL):
             raise CLRuntimeError("clEnqueueFillBuffer() failed with "
                                  "error %s" % CL.get_error_description(n), n)
         return Event(event[0]) if event != cl.ffi.NULL else None
+
 
     def svm_map(self, svm_ptr, flags, size, blocking=True,
                 wait_for=None, need_event=False):
@@ -601,6 +949,7 @@ class Queue(CL):
                                  CL.get_error_description(err), err)
         return None if event == cl.ffi.NULL else Event(event[0])
 
+
     def svm_unmap(self, svm_ptr, wait_for=None, need_event=True):
         """Unmaps previously mapped SVM buffer.
 
@@ -625,6 +974,7 @@ class Queue(CL):
                 "clEnqueueSVMUnmap() failed with error %s" %
                 CL.get_error_description(err), err)
         return Event(event[0]) if event != cl.ffi.NULL else None
+
 
     def svm_memcpy(self, dst, src, size, blocking=True,
                    wait_for=None, need_event=False):
@@ -651,6 +1001,7 @@ class Queue(CL):
             raise CLRuntimeError("clEnqueueSVMMemcpy() failed with "
                                  "error %s" % CL.get_error_description(n), n)
         return Event(event[0]) if event != cl.ffi.NULL else None
+
 
     def svm_memfill(self, svm_ptr, pattern, pattern_size, size,
                     wait_for=None, need_event=True):
@@ -684,6 +1035,7 @@ class Queue(CL):
             raise CLRuntimeError("clEnqueueSVMMemFill() failed with "
                                  "error %s" % CL.get_error_description(n), n)
         return Event(event[0]) if event != cl.ffi.NULL else None
+
 
     def flush(self):
         """Flushes the queue.
@@ -854,6 +1206,95 @@ class skip(object):
         self._number = value
 
 
+class Image(CL):
+    """Holds OpenCL image.
+
+    Attributes:
+        context: Context object associated with this image.
+        flags: flags supplied for the creation of this image.
+        image_format: A 2-tuple of integers.
+                    (image_channel_order, image_channel_data_type)
+        image_desc: A 10-tuple containing the values of a cl_image_desc struct.
+        host_array: host array reference, such as numpy array,
+                    will be stored only if flags include CL_MEM_USE_HOST_PTR.
+        size: size of the host array.
+        _n_refs: reference count as a workaround for possible
+                 incorrect destructor call order, see
+                 http://bugs.python.org/issue23720
+                 (weakrefs do not help here).
+    """
+    def __init__(self, context, flags, image_format, image_desc, host_array=None):
+        super(Image, self).__init__()
+        context._add_ref(self)
+        self._n_refs = 1
+        self._context = context
+        self._flags = flags
+        self._host_array = (host_array if flags & cl.CL_MEM_USE_HOST_PTR != 0
+                            else None)
+        host_ptr = CL.extract_ptr(host_array)
+
+        self.image_format = cl.ffi.new("cl_image_format *", image_format)
+        self.image_desc = cl.ffi.new("cl_image_desc *", image_desc)   # will the cast of buffer/mem_object work?
+        err = cl.ffi.new("cl_int *")
+        self._handle = self._lib.clCreateImage(
+            context.handle, flags, self.image_format, self.image_desc, host_ptr, err)
+        if err[0]:
+            self._handle = None
+            raise CLRuntimeError(
+                "clCreateImage() failed with error %s" %
+                ( CL.get_error_description(err[0])), err[0])
+
+    def _add_ref(self, obj):
+        self._n_refs += 1
+
+    def _del_ref(self, obj):
+        with cl.lock:
+            self._n_refs -= 1
+            n_refs = self._n_refs
+        if n_refs <= 0:
+            self._release()
+
+    @property
+    def context(self):
+        """
+        Context object associated with this buffer.
+        """
+        return self._context
+
+    @property
+    def flags(self):
+        """
+        Flags supplied for the creation of this buffer.
+        """
+        return self._flags
+
+    @property
+    def host_array(self):
+        """
+        Host array reference, such as numpy array,
+        will be stored only if flags include CL_MEM_USE_HOST_PTR.
+        """
+        return self._host_array
+
+    @property
+    def size(self):
+        """
+        Size of the host array.
+        """
+        return self._size
+
+    def _release(self):
+        if self.handle is not None:
+            self._lib.clReleaseMemObject(self.handle)
+            self._handle = None
+
+    def __del__(self):
+        if self.context.handle is None:
+            raise SystemError("Incorrect destructor call order detected")
+        self._del_ref(self)
+        self.context._del_ref(self)
+
+
 class WorkGroupInfo(CL):
     """Some information about the kernel concerning the specified device.
     """
@@ -1007,7 +1448,7 @@ class Kernel(CL):
                  - may be cffi pointer also, in such case size should be set.
             size: size of the vle (may be None for buffers and scalars).
         """
-        if isinstance(vle, Buffer) or isinstance(vle, Pipe):
+        if isinstance(vle, Buffer) or isinstance(vle, Image) or isinstance(vle, Pipe):
             arg_value = cl.ffi.new("cl_mem[]", 1)
             arg_value[0] = vle.handle
             arg_size = cl.ffi.sizeof("cl_mem")
@@ -1026,7 +1467,7 @@ class Kernel(CL):
         elif isinstance(vle, SVM):
             return self.set_arg_svm(idx, vle)
         else:
-            raise ValueError("vle should be of type Buffer, Pipe, SVM, "
+            raise ValueError("vle should be of type Buffer, Image, Pipe, SVM, "
                              "numpy array, cffi pointer or None "
                              "in Kernel::set_arg()")
         n = self._lib.clSetKernelArg(self.handle, idx, arg_size, arg_value)
