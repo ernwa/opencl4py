@@ -38,7 +38,7 @@ Init module.
 """
 
 from opencl4py import _cffi
-from opencl4py._py import Platforms, Context, CLRuntimeError, skip
+from opencl4py._py import CL, Platforms, Context, Buffer, Image, CLRuntimeError, skip
 from opencl4py._cl_defines import *     # no point in repeating them all
 
 

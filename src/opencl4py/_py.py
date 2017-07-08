@@ -123,6 +123,50 @@ class CL(object):
         cl.CL_INVALID_DEVICE_QUEUE: "CL_INVALID_DEVICE_QUEUE"
     }
 
+
+    CHANNEL_ORDERS = {
+        cl.CL_R: "CL_R",
+        cl.CL_A: "CL_A",
+        cl.CL_RG: "CL_RG",
+        cl.CL_RA: "CL_RA",
+        cl.CL_RGB: "CL_RGB",
+        cl.CL_RGBA: "CL_RGBA",
+        cl.CL_BGRA: "CL_BGRA",
+        cl.CL_ARGB: "CL_ARGB",
+        cl.CL_INTENSITY: "CL_INTENSITY",
+        cl.CL_LUMINANCE: "CL_LUMINANCE",
+        cl.CL_Rx: "CL_Rx",
+        cl.CL_RGx: "CL_RGx",
+        cl.CL_RGBx: "CL_RGBx",
+        cl.CL_DEPTH: "CL_DEPTH",
+        cl.CL_DEPTH_STENCIL: "CL_DEPTH_STENCIL",
+        cl.CL_sRGB: "CL_sRGB",
+        cl.CL_sRGBx: "CL_sRGBx",
+        cl.CL_sRGBA: "CL_sRGBA",
+        cl.CL_sBGRA: "CL_sBGRA",
+        cl.CL_ABGR: "CL_ABGR",
+    }
+
+    CHANNEL_TYPES = {
+        cl.CL_SNORM_INT8: "CL_SNORM_INT8",
+        cl.CL_SNORM_INT16: "CL_SNORM_INT16",
+        cl.CL_UNORM_INT8: "CL_UNORM_INT8",
+        cl.CL_UNORM_INT16: "CL_UNORM_INT16",
+        cl.CL_UNORM_SHORT_565: "CL_UNORM_SHORT_565",
+        cl.CL_UNORM_SHORT_555: "CL_UNORM_SHORT_555",
+        cl.CL_UNORM_INT_101010: "CL_UNORM_INT_101010",
+        cl.CL_SIGNED_INT8: "CL_SIGNED_INT8",
+        cl.CL_SIGNED_INT16: "CL_SIGNED_INT16",
+        cl.CL_SIGNED_INT32: "CL_SIGNED_INT32",
+        cl.CL_UNSIGNED_INT8: "CL_UNSIGNED_INT8",
+        cl.CL_UNSIGNED_INT16: "CL_UNSIGNED_INT16",
+        cl.CL_UNSIGNED_INT32: "CL_UNSIGNED_INT32",
+        cl.CL_HALF_FLOAT: "CL_HALF_FLOAT",
+        cl.CL_FLOAT: "CL_FLOAT",
+        cl.CL_UNORM_INT24: "CL_UNORM_INT24",
+        cl.CL_UNORM_INT_101010_2: "CL_UNORM_INT_101010_2",
+    }
+
     def __init__(self):
         self._lib = cl.lib  # to hold the reference
         self._handle = None
@@ -1057,7 +1101,7 @@ class Buffer(CL):
     def __init__(self, context, flags, host_array, size=None,
                  parent=None, origin=0):
         self._init_empty(context, flags)
-        self._host_array = (host_array if flags & cl.CL_MEM_USE_HOST_PTR != 0
+        self._host_array = (host_array if flags & cl.CL_MEM_USE_HOST_PTR
                             else None)
         host_ptr, size = CL.extract_ptr_and_size(host_array, size)
         self._size = size
@@ -1978,6 +2022,17 @@ class Context(CL):
         List of Device object associated with this context.
         """
         return self._devices
+
+    def get_supported_image_formats(self, flags=cl.CL_MEM_READ_ONLY, image_type=cl.CL_MEM_OBJECT_IMAGE2D):
+        n_fmts = cl.ffi.new("cl_uint*")
+        status = self._lib.clGetSupportedImageFormats(self.handle, flags, image_type, 0, cl.ffi.NULL, n_fmts)
+        self.check_error(status, "clGetSupportedImageFormats")
+        fmts = cl.ffi.new("cl_image_format[]", n_fmts[0])
+        status = self._lib.clGetSupportedImageFormats(self.handle, flags, image_type, n_fmts[0], fmts, cl.ffi.NULL)
+        self.check_error(status, "clGetSupportedImageFormats")
+        return fmts
+
+
 
     def create_queue(self, device, flags=0, properties=None):
         """Creates Queue object for the supplied device.
