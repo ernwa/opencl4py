@@ -137,6 +137,8 @@ def _initialize(backends):
         };
     } cl_image_desc;
 
+    typedef struct __GLsync *cl_GLsync;
+
     cl_int clGetPlatformIDs(cl_uint num_entries,
                             cl_platform_id *platforms,
                             cl_uint *num_platforms);
@@ -377,45 +379,48 @@ def _initialize(backends):
                            const cl_event *event_wait_list,
                            cl_event *event);
 
-    cl_int clEnqueueSVMUnmap(cl_command_queue command_queue,
-                             void *svm_ptr,
-                             cl_uint  num_events_in_wait_list,
-                             const cl_event *event_wait_list,
-                             cl_event *event);
+    cl_int clEnqueueSVMUnmap(
+                    cl_command_queue command_queue,
+                    void *svm_ptr,
+                    cl_uint  num_events_in_wait_list,
+                    const cl_event *event_wait_list,
+                    cl_event *event);
 
-    cl_int clSetKernelArgSVMPointer(cl_kernel kernel,
-                                    cl_uint arg_index,
-                                    const void *arg_value);
+    cl_int clSetKernelArgSVMPointer(
+                    cl_kernel kernel,
+                    cl_uint arg_index,
+                    const void *arg_value);
 
-    cl_int clEnqueueSVMMemcpy(cl_command_queue command_queue,
-                              cl_bool blocking_copy,
-                              void *dst_ptr,
-                              const void *src_ptr,
-                              size_t size,
-                              cl_uint num_events_in_wait_list,
-                              const cl_event *event_wait_list,
-                              cl_event *event);
+    cl_int clEnqueueSVMMemcpy(
+                    cl_command_queue command_queue,
+                    cl_bool blocking_copy,
+                    void *dst_ptr,
+                    const void *src_ptr,
+                    size_t size,
+                    cl_uint num_events_in_wait_list,
+                    const cl_event *event_wait_list,
+                    cl_event *event);
 
     cl_int clEnqueueSVMMemFill(cl_command_queue command_queue,
-                               void *svm_ptr,
-                               const void *pattern,
-                               size_t pattern_size,
-                               size_t size,
-                               cl_uint num_events_in_wait_list,
-                               const cl_event *event_wait_list,
-                               cl_event *event);
+                    void *svm_ptr,
+                    const void *pattern,
+                    size_t pattern_size,
+                    size_t size,
+                    cl_uint num_events_in_wait_list,
+                    const cl_event *event_wait_list,
+                    cl_event *event);
 
 
 
     cl_sampler clCreateSampler(cl_context context,
-                cl_bool normalized_coords,
-                cl_addressing_mode addressing_mode,
-                cl_filter_mode filter_mode,
-                cl_int * errcode_ret); // deprecated CL1.2
+                    cl_bool normalized_coords,
+                    cl_addressing_mode addressing_mode,
+                    cl_filter_mode filter_mode,
+                    cl_int * errcode_ret); // deprecated CL1.2
 
     cl_sampler clCreateSamplerWithProperties(cl_context context,
-                              const cl_sampler_properties * normalized_coords,
-                              cl_int * errcode_ret);
+                    const cl_sampler_properties * normalized_coords,
+                    cl_int * errcode_ret);
 
     cl_int clRetainSampler(cl_sampler sampler);
 
@@ -428,25 +433,25 @@ def _initialize(backends):
                      size_t * param_value_size_ret);
 
     cl_int clGetSupportedImageFormats(cl_context context,
-                           cl_mem_flags flags,
-                           cl_mem_object_type image_type,
-                           cl_uint num_entries,
-                           cl_image_format * image_formats,
-                           cl_uint * num_image_formats);
+                    cl_mem_flags flags,
+                    cl_mem_object_type image_type,
+                    cl_uint num_entries,
+                    cl_image_format * image_formats,
+                    cl_uint * num_image_formats);
 
     cl_mem clCreateImage(cl_context context,
-              cl_mem_flags flags,
-              const cl_image_format * image_format,
-              const cl_image_desc * image_desc,
-              void * host_ptr,
-              cl_int * errcode_ret);
+                  cl_mem_flags flags,
+                  const cl_image_format * image_format,
+                  const cl_image_desc * image_desc,
+                  void * host_ptr,
+                  cl_int * errcode_ret);
 
     void * clEnqueueMapImage(cl_command_queue command_queue,
                   cl_mem image,
                   cl_bool blocking_map,
                   cl_map_flags map_flags,
-                  const size_t *    /* origin[3] */,
-                  const size_t *    /* region[3] */,
+                  const size_t * origin /* [3] */,
+                  const size_t * region /* [3] */,
                   size_t * image_row_pitch,
                   size_t * image_slice_pitch,
                   cl_uint num_events_in_wait_list,
@@ -457,8 +462,8 @@ def _initialize(backends):
     cl_int clEnqueueReadImage(cl_command_queue command_queue,
                    cl_mem image,
                    cl_bool blocking_read,
-                   const size_t *       /* origin[3] */,
-                   const size_t *       /* region[3] */,
+                   const size_t * origin /* [3] */,
+                   const size_t * region /* [3] */,
                    size_t row_pitch,
                    size_t slice_pitch,
                    void * ptr,
@@ -470,8 +475,8 @@ def _initialize(backends):
     cl_int clEnqueueWriteImage(cl_command_queue command_queue,
                     cl_mem image,
                     cl_bool blocking_write,
-                    const size_t *      /* origin[3] */,
-                    const size_t *      /* region[3] */,
+                    const size_t * origin /* [3] */,
+                    const size_t * region /* [3] */,
                     size_t input_row_pitch,
                     size_t input_slice_pitch,
                     const void * ptr,
@@ -482,8 +487,8 @@ def _initialize(backends):
     cl_int clEnqueueFillImage(cl_command_queue command_queue,
                    cl_mem image,
                    const void * fill_color,
-                   const size_t *     /* origin[3] */,
-                   const size_t *     /* region[3] */,
+                   const size_t * origin /* [3] */,
+                   const size_t * region /* [3] */,
                    cl_uint num_events_in_wait_list,
                    const cl_event * event_wait_list,
                    cl_event * event);
@@ -491,32 +496,32 @@ def _initialize(backends):
     cl_int clEnqueueCopyImage(cl_command_queue command_queue,
                    cl_mem src_image,
                    cl_mem dst_image,
-                   const size_t *       /* src_origin[3] */,
-                   const size_t *       /* dst_origin[3] */,
-                   const size_t *       /* region[3] */,
+                   const size_t * src_origin  /* [3] */,
+                   const size_t * dst_origin  /* [3] */,
+                   const size_t * region  /* [3] */,
                    cl_uint num_events_in_wait_list,
                    const cl_event * event_wait_list,
                    cl_event * event);
 
     cl_int clEnqueueCopyImageToBuffer(cl_command_queue command_queue,
-                           cl_mem src_image,
-                           cl_mem dst_buffer,
-                           const size_t *   /* src_origin[3] */,
-                           const size_t *   /* region[3] */,
-                           size_t dst_offset,
-                           cl_uint num_events_in_wait_list,
-                           const cl_event * event_wait_list,
-                           cl_event * event);
+                   cl_mem src_image,
+                   cl_mem dst_buffer,
+                   const size_t * origin /* [3] */,
+                   const size_t * region /* [3] */,
+                   size_t dst_offset,
+                   cl_uint num_events_in_wait_list,
+                   const cl_event * event_wait_list,
+                   cl_event * event);
 
 cl_int clEnqueueCopyBufferToImage(cl_command_queue command_queue,
-                           cl_mem src_buffer,
-                           cl_mem dst_image,
-                           size_t src_offset,
-                           const size_t *   /* dst_origin[3] */,
-                           const size_t *   /* region[3] */,
-                           cl_uint num_events_in_wait_list,
-                           const cl_event * event_wait_list,
-                           cl_event * event);
+                   cl_mem src_buffer,
+                   cl_mem dst_image,
+                   size_t src_offset,
+                   const size_t * origin /* [3] */,
+                   const size_t * region /* [3] */,
+                   cl_uint num_events_in_wait_list,
+                   const cl_event * event_wait_list,
+                   cl_event * event);
 
 /* OPENGL INTEROP! */
     typedef int          cl_GLint;
@@ -529,52 +534,52 @@ cl_int clEnqueueCopyBufferToImage(cl_command_queue command_queue,
 
 
 cl_int clGetGLContextInfoKHR(const cl_context_properties * properties,
-                      cl_gl_context_info            param_name,
-                      size_t                        param_value_size,
-                      void *                        param_value,
-                      size_t *                       param_value_size_ret);
+                    cl_gl_context_info            param_name,
+                    size_t                        param_value_size,
+                    void *                        param_value,
+                    size_t *                       param_value_size_ret);
 
 
 cl_mem clCreateFromGLBuffer(cl_context     context,
-                     cl_mem_flags   flags,
-                     cl_GLuint      bufobj,
-                     int *          errcode_ret);
+                    cl_mem_flags   flags,
+                    cl_GLuint      bufobj,
+                    int *          errcode_ret);
 
 cl_mem clCreateFromGLTexture(cl_context      context,
-                      cl_mem_flags    flags,
-                      cl_GLenum       target,
-                      cl_GLint        miplevel,
-                      cl_GLuint       texture,
-                      cl_int *        errcode_ret);
+                    cl_mem_flags    flags,
+                    cl_GLenum       target,
+                    cl_GLint        miplevel,
+                    cl_GLuint       texture,
+                    cl_int *        errcode_ret);
 
 cl_mem clCreateFromGLRenderbuffer(cl_context   context,
-                           cl_mem_flags flags,
-                           cl_GLuint    renderbuffer,
-                           cl_int *     errcode_ret);
+                    cl_mem_flags flags,
+                    cl_GLuint    renderbuffer,
+                    cl_int *     errcode_ret);
 
 cl_int clGetGLObjectInfo(cl_mem                memobj,
-                  cl_gl_object_type *   gl_object_type,
-                  cl_GLuint *           gl_object_name);
+                    cl_gl_object_type *   gl_object_type,
+                    cl_GLuint *           gl_object_name);
 
 cl_int clGetGLTextureInfo(cl_mem               memobj,
-                   cl_gl_texture_info   param_name,
-                   size_t               param_value_size,
-                   void *               param_value,
-                   size_t *             param_value_size_ret);
+                    cl_gl_texture_info   param_name,
+                    size_t               param_value_size,
+                    void *               param_value,
+                    size_t *             param_value_size_ret);
 
 cl_int clEnqueueAcquireGLObjects(cl_command_queue      command_queue,
-                          cl_uint               num_objects,
-                          const cl_mem *        mem_objects,
-                          cl_uint               num_events_in_wait_list,
-                          const cl_event *      event_wait_list,
-                          cl_event *            event);
+                    cl_uint               num_objects,
+                    const cl_mem *        mem_objects,
+                    cl_uint               num_events_in_wait_list,
+                    const cl_event *      event_wait_list,
+                    cl_event *            event);
 
 cl_int clEnqueueReleaseGLObjects(cl_command_queue      command_queue,
-                          cl_uint               num_objects,
-                          const cl_mem *        mem_objects,
-                          cl_uint               num_events_in_wait_list,
-                          const cl_event *      event_wait_list,
-                          cl_event *            event);
+                    cl_uint               num_objects,
+                    const cl_mem *        mem_objects,
+                    cl_uint               num_events_in_wait_list,
+                    const cl_event *      event_wait_list,
+                    cl_event *            event);
 
 
 /* Deprecated OpenCL 1.1 APIs */
@@ -591,6 +596,11 @@ cl_mem clCreateFromGLTexture3D(cl_context      context,
                         cl_GLint        miplevel,
                         cl_GLuint       texture,
                         cl_int *        errcode_ret);
+
+cl_event clCreateEventFromGLsyncKHR(
+                           cl_context context,
+                           cl_GLsync cl_GLsync,
+                           cl_int errcode_ret);
 
 """
 

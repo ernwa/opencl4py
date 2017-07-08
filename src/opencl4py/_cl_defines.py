@@ -553,3 +553,5 @@ CL_EGL_DISPLAY_KHR                      = 0x2009
 CL_GLX_DISPLAY_KHR                      = 0x200A
 CL_WGL_HDC_KHR                          = 0x200B
 CL_CGL_SHAREGROUP_KHR                   = 0x200C
+
+CL_COMMAND_GL_FENCE_SYNC_OBJECT_KHR     = 0x200D

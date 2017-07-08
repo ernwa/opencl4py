@@ -38,6 +38,13 @@ Helper classes for OpenCL cffi bindings.
 """
 import opencl4py._cffi as cl
 
+def ensure_type(typespec, obj, cast=False):
+    if not isinstance(obj, cl.ffi.CData):  # cffi object
+        return cl.ffi.new(typespec, obj)
+    if cast:
+        return cl.ffi.cast(typespec, obj)  # try to cast it
+    return obj
+
 
 class CLRuntimeError(RuntimeError):
     def __init__(self, msg, code):
@@ -564,7 +571,8 @@ class Queue(CL):
         host_ptr = CL.extract_ptr(host_array)
 
         if region is None:
-            region = [ max(x, 1) for x in (image.image_desc.image_width,
+            region = [ max(x, 1) for x in (
+                image.image_desc.image_width,
                 image.image_desc.image_height,
                 image.image_desc.image_depth) ]
 
@@ -635,7 +643,8 @@ class Queue(CL):
         host_ptr = CL.extract_ptr(host_array)
 
         if region is None:
-            region = [ max(x, 1) for x in (image.image_desc.image_width,
+            region = [ max(x, 1) for x in (
+                image.image_desc.image_width,
                 image.image_desc.image_height,
                 image.image_desc.image_depth) ]
 
@@ -676,7 +685,8 @@ class Queue(CL):
         ptr_pattern = CL.extract_ptr(fill_color)
 
         if region is None:
-            region = [ max(x, 1) for x in (image.image_desc.image_width,
+            region = [ max(x, 1) for x in (
+                image.image_desc.image_width,
                 image.image_desc.image_height,
                 image.image_desc.image_depth) ]
 
@@ -794,10 +804,11 @@ class Queue(CL):
             Event object or None if need_event == False,
         """
         src_origin = tuple(src_origin) + (3-len(src_origin)) * (0,)
-        dst_origin = tuple(src_origin) + (3-len(src_origin)) * (0,)
+        dst_origin = tuple(dst_origin) + (3-len(dst_origin)) * (0,)
 
         if region is None:
-            region = [ max(x, 1) for x in (src_image.image_desc.image_width,
+            region = [ max(x, 1) for x in (
+                src_image.image_desc.image_width,
                 src_image.image_desc.image_height,
                 src_image.image_desc.image_depth) ]
 
@@ -810,7 +821,7 @@ class Queue(CL):
         event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
 
-        n = self._lib.clEnqueueCopyImageToBuffer(
+        n = self._lib.clEnqueueCopyImage(
             self.handle, src_image.handle, dst_image.handle,
             src_origin_struct, dst_origin_struct, region_struct,
             n_events, wait_list, event)
@@ -838,7 +849,8 @@ class Queue(CL):
             Event object or None if need_event == False,
         """
         if region is None:
-            region = [ max(x, 1) for x in (src_image.image_desc.image_width,
+            region = [ max(x, 1) for x in (
+                src_image.image_desc.image_width,
                 src_image.image_desc.image_height,
                 src_image.image_desc.image_depth) ]
 
@@ -879,7 +891,8 @@ class Queue(CL):
             Event object or None if need_event == False,
         """
         if region is None:
-            region = [ max(x, 1) for x in (dst_image.image_desc.image_width,
+            region = [ max(x, 1) for x in (
+                dst_image.image_desc.image_width,
                 dst_image.image_desc.image_height,
                 dst_image.image_desc.image_depth) ]
 
@@ -1273,8 +1286,8 @@ class Image(CL):
                             else None)
         host_ptr = CL.extract_ptr(host_array)
 
-        self.image_format = cl.ffi.new("cl_image_format *", image_format)
-        self.image_desc = cl.ffi.new("cl_image_desc *", image_desc)   # will the cast of buffer/mem_object work?
+        self.image_format = ensure_type("cl_image_format *", image_format)
+        self.image_desc = ensure_type("cl_image_desc *", image_desc)   # will the cast of buffer/mem_object work?
         err = cl.ffi.new("cl_int *")
         self._handle = self._lib.clCreateImage(
             context.handle, flags, self.image_format, self.image_desc, host_ptr, err)
@@ -1548,7 +1561,7 @@ class Kernel(CL):
         elif vle is None:
             arg_value = cl.ffi.NULL
             arg_size = cl.ffi.sizeof("cl_mem") if size is None else size
-        elif type(vle) == type(cl.ffi.NULL):  # cffi pointer
+        elif isinstance(vle, cl.ffi.CData):  # cffi object
             arg_value = cl.ffi.cast("const void*", vle)
             if size is None:
                 raise ValueError("size should be set in case of cffi pointer")
