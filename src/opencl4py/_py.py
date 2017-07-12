@@ -470,7 +470,7 @@ class Queue(CL):
                 int(row_pitch[0]), int(slice_pitch[0]))
 
 
-    def map_buffer(self, buf, flags, size, blocking=True, offset=0,
+    def map_buffer(self, buf, flags, size=None, blocking=True, offset=0,
                    wait_for=None, need_event=False):
         """Maps buffer.
 
@@ -492,19 +492,19 @@ class Queue(CL):
         event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
         ptr = self._lib.clEnqueueMapBuffer(
-            self.handle, buf.handle, blocking, flags, offset, size,
+            self.handle, buf.handle, blocking, flags, offset, size or (buf.size - offset),
             n_events, wait_list, event, err)
         self.check_error(err[0], "clEnqueueMapBuffer")
         return (None if event == cl.ffi.NULL else Event(event[0]),
                 int(cl.ffi.cast("size_t", ptr)))
 
 
-    def unmap_buffer(self, buf, ptr, wait_for=None, need_event=True):
-        """Unmaps previously mapped buffer.
+    def unmap(self, obj, ptr, wait_for=None, need_event=True):
+        """Unmaps previously mapped object.
 
         Parameters:
-            buf: Buffer object to unmap.
-            ptr: pointer to the mapped buffer.
+            obj: Buffer object to unmap.
+            ptr: pointer to the mapped object.
             wait_for: list of the Event objects to wait.
             need_event: return Event object or not.
 
@@ -514,12 +514,12 @@ class Queue(CL):
         event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
         n = self._lib.clEnqueueUnmapMemObject(
-            self.handle, buf.handle, cl.ffi.cast("void*", ptr),
+            self.handle, obj.handle, cl.ffi.cast("void*", ptr),
             n_events, wait_list, event)
         self.check_error(n, "clEnqueueUnmapMemObject")
         return Event(event[0]) if event != cl.ffi.NULL else None
 
-    unmap = unmap_buffer
+    unmap_buffer = unmap
 
 
     def read_buffer(self, buf, host_array, blocking=True, size=None, offset=0,
@@ -727,7 +727,7 @@ class Queue(CL):
         """
         if size is None:    # assume smaller of either size
             # assert src.size == dst.size, 'buffer sizes must match'
-            size = min(src.size, dst.size)
+            size = min(src.size - src_offset, dst.size - dst_offset)
 
         event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
@@ -915,18 +915,18 @@ class Queue(CL):
         return None if event == cl.ffi.NULL else Event(event[0])
 
 
-    def fill_buffer(self, buffer, pattern, pattern_size=None, size=None, offset=0, # FIXME: calculate size?
+    def fill_buffer(self, buf, pattern, pattern_size=None, size=None, offset=0, # FIXME: calculate size?
                     wait_for=None, need_event=True):
         """Enqueues a command to fill a region of a Buffer.
 
         Parameters:
-            buffer: Buffer object.
+            buf: Buffer object.
             pattern: a pointer to the data pattern of size pattern_size
                      in bytes, pattern will be used to fill a region in
                      buffer starting at offset and is size bytes in size
                      (numpy array or direct cffi pointer).
             pattern_size: pattern size in bytes.
-            size: the size in bytes of region being filled in buffer
+            size: the size in bytes of region being filled in buf
                   and must be a multiple of pattern_size.
             wait_for: list of the Event objects to wait.
             need_event: return Event object or not.
@@ -935,19 +935,19 @@ class Queue(CL):
             Event object or None if need_event == False.
         """
         if size is None:
-            size = buffer.size
+            size = buf.size
 
         event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
         pattern, pattern_size = CL.extract_ptr_and_size(pattern, pattern_size)
         n = self._lib.clEnqueueFillBuffer(
-            self.handle, buffer.handle, pattern, pattern_size, offset, size,
-            n_events, wait_list, event)
+            self.handle, buf.handle, pattern, pattern_size, offset,
+            size or (buf.size - offset), n_events, wait_list, event)
         self.check_error(n, "clEnqueueFillBuffer")
         return Event(event[0]) if event != cl.ffi.NULL else None
 
 
-    def svm_map(self, svm_ptr, flags, size, blocking=True,
+    def svm_map(self, svm_ptr, flags, size=None, blocking=True,
                 wait_for=None, need_event=False):
         """Enqueues a command that will allow the host to update a region
         of a SVM buffer.
@@ -970,7 +970,7 @@ class Queue(CL):
         else:
             ptr, size = CL.extract_ptr_and_size(svm_ptr, size)
         err = self._lib.clEnqueueSVMMap(
-            self.handle, blocking, flags, ptr, size,
+            self.handle, blocking, flags, ptr, size or svm_ptr.size,
             n_events, wait_list, event)
         self.check_error(err, "clEnqueueSVMMap")
         return None if event == cl.ffi.NULL else Event(event[0])
@@ -1002,7 +1002,7 @@ class Queue(CL):
         return Event(event[0]) if event != cl.ffi.NULL else None
 
 
-    def svm_memcpy(self, dst, src, size, blocking=True,
+    def svm_memcpy(self, dst, src, size=None, blocking=True,
                    wait_for=None, need_event=False):
         """Enqueues a command to do a memcpy operation.
 
@@ -1019,15 +1019,16 @@ class Queue(CL):
         """
         event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
-        dst, _ = CL.extract_ptr_and_size(dst, 0)
-        src, _ = CL.extract_ptr_and_size(src, 0)
+        dst, sz_dst = CL.extract_ptr_and_size(dst, 0)
+        src, sz_src = CL.extract_ptr_and_size(src, 0)
+        size = size or min(sz_src, sz_dst)
         n = self._lib.clEnqueueSVMMemcpy(
             self.handle, blocking, dst, src, size, n_events, wait_list, event)
         self.check_error(n, "clEnqueueSVMMemcpy")
         return Event(event[0]) if event != cl.ffi.NULL else None
 
 
-    def svm_memfill(self, svm_ptr, pattern, pattern_size, size,
+    def svm_memfill(self, svm_ptr, pattern, pattern_size, size,     # TODO: remove need for explicit sizes
                     wait_for=None, need_event=True):
         """Enqueues a command to fill a region in memory with a pattern
         of a given pattern size.
@@ -1160,7 +1161,7 @@ class Buffer(CL):
         return self
 
 
-    def create_sub_buffer(self, origin, size, flags=0):
+    def create_sub_buffer(self, origin=0, size=None, flags=0):
         """Creates subbufer from the region of the original buffer.
 
         Parameters:
@@ -1169,7 +1170,7 @@ class Buffer(CL):
             origin: offset in bytes in the original buffer
             size: size in bytes of the new buffer.
         """
-        return Buffer(self._context, flags, self._host_array, size,
+        return Buffer(self._context, flags, self._host_array, size or self.size,
                       self, origin)
 
 
@@ -1280,10 +1281,10 @@ class Image(CL):
         self._flags = flags
         return self
 
+
     def __init__(self, context, flags, image_format, image_desc, host_array=None):
         self._init_empty(context, flags)
-        self._host_array = (host_array if flags & cl.CL_MEM_USE_HOST_PTR != 0
-                            else None)
+        self._host_array = (host_array if flags & cl.CL_MEM_USE_HOST_PTR != 0 else None)
         host_ptr = CL.extract_ptr(host_array)
 
         self.image_format = ensure_type("cl_image_format *", image_format)
@@ -1378,12 +1379,79 @@ class Image(CL):
         """
         return self._host_array
 
-    # @property
-    # def size(self):
-    #     """
-    #     Size of the host array.
-    #     """
-    #     return self._size
+    @property
+    def size(self):
+        """
+        size of the image in bytes
+        """
+        return ((self.slice_pitch * self.depth) or      # if 2D, depth is zero, so...
+                ((self.height or 1) * self.row_pitch))  # calculate for that case
+
+    @property
+    def format(self):
+        """Returns image format descriptor specified when image is created.
+        """
+        buf = cl.ffi.new("cl_image_format *")
+        self._get_info(cl.CL_IMAGE_FORMAT, buf)
+        return int(buf[0])
+
+    @property
+    def element_size(self):
+        "Return size of each element of the image memory object."
+        buf = cl.ffi.new("size_t *")
+        self._get_info(cl.CL_IMAGE_ELEMENT_SIZE, buf)
+        return int(buf[0])
+
+    @property
+    def row_pitch(self):
+        "Return size in bytes of a row of elements of the image."
+        buf = cl.ffi.new("size_t *")
+        self._get_info(cl.CL_IMAGE_ROW_PITCH, buf)
+        return int(buf[0])
+
+    @property
+    def slice_pitch(self):
+        """Return size in bytes of a 2D slice for a 3D image.
+           For a 2D image this will be 0."""
+        buf = cl.ffi.new("size_t *")
+        self._get_info(cl.CL_IMAGE_SLICE_PITCH, buf)
+        return int(buf[0])
+
+    @property
+    def width(self):
+        "Return width of image in pixels."
+        buf = cl.ffi.new("size_t *")
+        self._get_info(cl.CL_IMAGE_WIDTH, buf)
+        return int(buf[0])
+
+    @property
+    def height(self):
+        "Return height of image in pixels."
+        buf = cl.ffi.new("size_t *")
+        self._get_info(cl.CL_IMAGE_HEIGHT, buf)
+        return int(buf[0])
+
+    @property
+    def depth(self):
+        """Return depth of the image in pixels.
+           For a 2D image, depth equals 0."""
+        buf = cl.ffi.new("size_t *")
+        self._get_info(cl.CL_IMAGE_DEPTH, buf)
+        return int(buf[0])
+
+    @property
+    def element_size(self):
+        "Return size of each element of the image memory object."
+        buf = cl.ffi.new("ID3D10Resource *")
+        self._get_info(cl.CL_IMAGE_D3D10_SUBRESOURCE_KHR, buf)
+        return int(buf[0])  # should i do this?
+
+    def _get_info(self, code, buf):
+        sz = cl.ffi.new("size_t *")
+        err = self._lib.clGetImageInfo( self.kernel.handle,
+            code, cl.ffi.sizeof(buf), buf, sz)
+        self.check_error(err)
+        return sz[0]
 
     def _release(self):
         if self.handle is not None:
@@ -1985,7 +2053,7 @@ class Context(CL):
 
         if not devices:
             gl_ctx_props = Context._properties_list(gl_context_type, gl_context)
-            print 'attempting to create cl context from gl context'
+            print 'attempting to create cl context from gl context' # TODO: test and remove print statements
 
             sizeof_device_id = cl.ffi.sizeof("cl_device_id")
             gl_device_id = cl.ffi.new("cl_device_id *")
@@ -2087,7 +2155,7 @@ class Context(CL):
         Returns:
             Image object.
         """
-        return Image(self, flags, image_format, image_desc, host_array=None)
+        return Image(self, flags, image_format, image_desc, host_array)
 
     def create_from_gl_renderbuffer(self, flags, renderbuffer):
         """Creates an OpenCL 2D image object from an OpenGL renderbuffer object.

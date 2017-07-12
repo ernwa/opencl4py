@@ -274,6 +274,12 @@ CL_MEM_SVM_FINE_GRAIN_BUFFER =                (1 << 10)   #  used by cl_svm_mem_
 CL_MEM_SVM_ATOMICS =                          (1 << 11)   #  used by cl_svm_mem_flags only
 CL_MEM_KERNEL_READ_AND_WRITE =                (1 << 12)
 
+CL_MEM_KERNEL_ACCESS_MASK =  ( CL_MEM_KERNEL_READ_AND_WRITE | CL_MEM_READ_WRITE |
+                CL_MEM_READ_ONLY | CL_MEM_WRITE_ONLY )
+CL_MEM_HOST_ACCESS_MASK = ( CL_MEM_HOST_READ_ONLY | CL_MEM_HOST_WRITE_ONLY | CL_MEM_HOST_NO_ACCESS )
+CL_MEM_ACCESS_MASK = CL_MEM_KERNEL_ACCESS_MASK | CL_MEM_HOST_ACCESS_MASK
+
+
 #  cl_mem_migration_flags - bitfield
 CL_MIGRATE_MEM_OBJECT_HOST =                  (1 << 0)
 CL_MIGRATE_MEM_OBJECT_CONTENT_UNDEFINED =     (1 << 1)
