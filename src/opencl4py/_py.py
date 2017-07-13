@@ -180,11 +180,9 @@ class CL(object):
 
     def check_error(self, err, funcname):
         if err:
-            try:
+            if hasattr(self, "_handle"):
                 self._handle = None
 #                self._del_ref(self)     # shouldn't these both be here
-            except AttributeError:
-                pass
             raise CLRuntimeError(
                 "%s() failed with error %s" %
                 ( funcname, CL.get_error_description(err)), err )
@@ -512,6 +510,7 @@ class Queue(CL):
             Event object or None if need_event == False.
         """
         event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        ptr = CL.extract_ptr(ptr)
         wait_list, n_events = CL.get_wait_list(wait_for)
         n = self._lib.clEnqueueUnmapMemObject(
             self.handle, obj.handle, cl.ffi.cast("void*", ptr),
@@ -581,9 +580,10 @@ class Queue(CL):
 
         origin_struct = cl.ffi.new("size_t[3]", origin)
         region_struct = cl.ffi.new("size_t[3]", region)
-
         event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
+
+        print host_ptr
 
         n = self._lib.clEnqueueReadImage(
             self.handle, image.handle, blocking, origin_struct, region_struct,
@@ -995,10 +995,7 @@ class Queue(CL):
             ptr, _size = CL.extract_ptr_and_size(svm_ptr, 0)
         err = self._lib.clEnqueueSVMUnmap(
             self.handle, ptr, n_events, wait_list, event)
-        if err:
-            raise CLRuntimeError(
-                "clEnqueueSVMUnmap() failed with error %s" %
-                CL.get_error_description(err), err)
+        self.check_error(err, "clEnqueueSVMUnmap")
         return Event(event[0]) if event != cl.ffi.NULL else None
 
 
@@ -1084,7 +1081,58 @@ class Queue(CL):
         self.context._del_ref(self)
 
 
-class Buffer(CL):
+class MemObject(object):    # implements clGetMemObjectInfo interface
+    @property
+    def type(self):
+        buf = cl.ffi.new("cl_mem_object_type *")
+        self._get_mem_object_info(cl.CL_MEM_TYPE, buf)
+        return buf[0]
+
+    @property
+    def flags(self):
+        buf = cl.ffi.new("cl_mem_flags *")
+        self._get_mem_object_info(cl.CL_MEM_FLAGS, buf)
+        return int(buf[0])
+
+    @property
+    def size(self):
+        buf = cl.ffi.new("size_t *")
+        self._get_mem_object_info(cl.CL_MEM_SIZE, buf)
+        return int(buf[0])
+
+    @property
+    def host_ptr(self):
+        buf = cl.ffi.new("void* *")
+        self._get_mem_object_info(cl.CL_MEM_HOST_PTR, buf)
+        return buf[0]
+
+    @property
+    def map_count(self):
+        buf = cl.ffi.new("cl_uint *")
+        self._get_mem_object_info(cl.CL_MEM_MAP_COUNT, buf)
+        return int(buf[0])
+
+    @property
+    def reference_count(self):
+        buf = cl.ffi.new("cl_uint *")
+        self._get_mem_object_info(cl.CL_MEM_REFERENCE_COUNT, buf)
+        return int(buf[0])
+
+    @property
+    def context(self):
+        buf = cl.ffi.new("cl_context *")
+        self._get_mem_object_info(cl.CL_MEM_CONTEXT, buf)
+        return int(buf[0])
+
+    def _get_mem_object_info(self, code, buf):
+       sz = cl.ffi.new("size_t *")
+       err = self._lib.clGetMemObjectInfo( self.handle,
+           code, cl.ffi.sizeof(buf), buf, sz)
+       self.check_error(err, 'clGetMemObjectInfo')
+       return sz[0]
+
+
+class Buffer(CL, MemObject):
     """Holds OpenCL buffer.
 
     Attributes:
@@ -1209,7 +1257,7 @@ class Buffer(CL):
         return self._host_array
 
     @property
-    def size(self):
+    def host_array_size(self):
         """
         Size of the host array.
         """
@@ -1256,7 +1304,7 @@ class skip(object):
         self._number = value
 
 
-class Image(CL):
+class Image(CL, MemObject):
     """Holds OpenCL image.
 
     Attributes:
@@ -1364,12 +1412,12 @@ class Image(CL):
         """
         return self._context
 
-    @property
-    def flags(self):
-        """
-        Flags supplied for the creation of this buffer.
-        """
-        return self._flags
+    # @property
+    # def flags(self):
+    #     """
+    #     Flags supplied for the creation of this buffer.
+    #     """
+    #     return self._flags
 
     @property
     def host_array(self):
@@ -1380,33 +1428,25 @@ class Image(CL):
         return self._host_array
 
     @property
-    def size(self):
-        """
-        size of the image in bytes
-        """
-        return ((self.slice_pitch * self.depth) or      # if 2D, depth is zero, so...
-                ((self.height or 1) * self.row_pitch))  # calculate for that case
-
-    @property
     def format(self):
         """Returns image format descriptor specified when image is created.
         """
         buf = cl.ffi.new("cl_image_format *")
-        self._get_info(cl.CL_IMAGE_FORMAT, buf)
+        self._get_image_info(cl.CL_IMAGE_FORMAT, buf)
         return int(buf[0])
 
     @property
     def element_size(self):
         "Return size of each element of the image memory object."
         buf = cl.ffi.new("size_t *")
-        self._get_info(cl.CL_IMAGE_ELEMENT_SIZE, buf)
+        self._get_image_info(cl.CL_IMAGE_ELEMENT_SIZE, buf)
         return int(buf[0])
 
     @property
     def row_pitch(self):
         "Return size in bytes of a row of elements of the image."
         buf = cl.ffi.new("size_t *")
-        self._get_info(cl.CL_IMAGE_ROW_PITCH, buf)
+        self._get_image_info(cl.CL_IMAGE_ROW_PITCH, buf)
         return int(buf[0])
 
     @property
@@ -1414,21 +1454,21 @@ class Image(CL):
         """Return size in bytes of a 2D slice for a 3D image.
            For a 2D image this will be 0."""
         buf = cl.ffi.new("size_t *")
-        self._get_info(cl.CL_IMAGE_SLICE_PITCH, buf)
+        self._get_image_info(cl.CL_IMAGE_SLICE_PITCH, buf)
         return int(buf[0])
 
     @property
     def width(self):
         "Return width of image in pixels."
         buf = cl.ffi.new("size_t *")
-        self._get_info(cl.CL_IMAGE_WIDTH, buf)
+        self._get_image_info(cl.CL_IMAGE_WIDTH, buf)
         return int(buf[0])
 
     @property
     def height(self):
         "Return height of image in pixels."
         buf = cl.ffi.new("size_t *")
-        self._get_info(cl.CL_IMAGE_HEIGHT, buf)
+        self._get_image_info(cl.CL_IMAGE_HEIGHT, buf)
         return int(buf[0])
 
     @property
@@ -1436,21 +1476,21 @@ class Image(CL):
         """Return depth of the image in pixels.
            For a 2D image, depth equals 0."""
         buf = cl.ffi.new("size_t *")
-        self._get_info(cl.CL_IMAGE_DEPTH, buf)
+        self._get_image_info(cl.CL_IMAGE_DEPTH, buf)
         return int(buf[0])
 
     @property
-    def element_size(self):
+    def d3d10_subresource(self):
         "Return size of each element of the image memory object."
         buf = cl.ffi.new("ID3D10Resource *")
-        self._get_info(cl.CL_IMAGE_D3D10_SUBRESOURCE_KHR, buf)
+        self._get_image_info(cl.CL_IMAGE_D3D10_SUBRESOURCE_KHR, buf)
         return int(buf[0])  # should i do this?
 
-    def _get_info(self, code, buf):
+    def _get_image_info(self, code, buf):
         sz = cl.ffi.new("size_t *")
-        err = self._lib.clGetImageInfo( self.kernel.handle,
+        err = self._lib.clGetImageInfo( self.handle,
             code, cl.ffi.sizeof(buf), buf, sz)
-        self.check_error(err)
+        self.check_error(err, 'clGetImageInfo')
         return sz[0]
 
     def _release(self):
@@ -1542,10 +1582,7 @@ class WorkGroupInfo(CL):
         err = self._lib.clGetKernelWorkGroupInfo(
             self.kernel.handle, self.device.handle, code,
             cl.ffi.sizeof(buf), buf, sz)
-        if err:
-            raise CLRuntimeError(
-                "clGetKernelWorkGroupInfo() failed with error %s" %
-                CL.get_error_description(err), err)
+        self.check_error(err, "clGetKernelWorkGroupInfo")
         return sz[0]
 
 
@@ -1564,11 +1601,8 @@ class Kernel(CL):
         err = cl.ffi.new("cl_int *")
         ss = cl.ffi.new("char[]", name.encode("utf-8"))
         self._handle = self._lib.clCreateKernel(program.handle, ss, err)
-        if err[0]:
-            self._handle = None
-            raise CLRuntimeError("clCreateKernel() failed with error %s" %
-                                 CL.get_error_description(err[0]),
-                                 err[0])
+        self.check_error(err[0], "clCreateKernel")
+#            self._handle = None
 
     @property
     def program(self):
@@ -2020,6 +2054,8 @@ class SVM(CL):
             raise SystemError("Incorrect destructor call order detected")
         self._release()
         self.context._del_ref(self)
+
+
 
 
 class Context(CL):

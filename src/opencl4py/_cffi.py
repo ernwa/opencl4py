@@ -244,6 +244,13 @@ def _initialize(backends):
 
     cl_int clReleaseCommandQueue(cl_command_queue command_queue);
 
+
+    cl_int clGetMemObjectInfo(cl_mem   memobj,
+                   cl_mem_info         param_name,
+                   size_t              param_value_size,
+                   void *              param_value,
+                   size_t *            param_value_size_ret);
+    
     cl_mem clCreateBuffer(cl_context context,
                           cl_mem_flags flags,
                           size_t size,
@@ -438,6 +445,13 @@ def _initialize(backends):
                     cl_uint num_entries,
                     cl_image_format * image_formats,
                     cl_uint * num_image_formats);
+
+    cl_int clGetImageInfo(cl_mem image,
+               cl_image_info    param_name,
+               size_t           param_value_size,
+               void *           param_value,
+               size_t *         param_value_size_ret);
+
 
     cl_mem clCreateImage(cl_context context,
                   cl_mem_flags flags,
