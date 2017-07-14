@@ -250,7 +250,7 @@ def _initialize(backends):
                    size_t              param_value_size,
                    void *              param_value,
                    size_t *            param_value_size_ret);
-    
+
     cl_mem clCreateBuffer(cl_context context,
                           cl_mem_flags flags,
                           size_t size,
@@ -292,6 +292,21 @@ def _initialize(backends):
                                cl_uint num_events_in_wait_list,
                                const cl_event *event_wait_list,
                                cl_event *event);
+
+    cl_int clEnqueueReadBufferRect(cl_command_queue command_queue,
+                            cl_mem               buffer ,
+                            cl_bool              blocking_read ,
+                            const size_t *       buffer_offset ,
+                            const size_t *       host_offset ,
+                            const size_t *       region ,
+                            size_t               buffer_row_pitch ,
+                            size_t               buffer_slice_pitch ,
+                            size_t               host_row_pitch ,
+                            size_t               host_slice_pitch ,
+                            void *               ptr ,
+                            cl_uint              num_events_in_wait_list ,
+                            const cl_event *     event_wait_list ,
+                            cl_event *           event );
 
     cl_int clEnqueueWriteBuffer(cl_command_queue command_queue,
                                 cl_mem buffer,
@@ -337,8 +352,17 @@ def _initialize(backends):
                                const cl_event *event_wait_list,
                                cl_event *event);
 
-    cl_int clWaitForEvents(cl_uint num_events,
-                           const cl_event *event_list);
+
+    cl_int clEnqueueMigrateMemObjects (	cl_command_queue  command_queue ,
+                             	cl_uint                   num_mem_objects ,
+                             	const cl_mem              *mem_objects ,
+                             	cl_mem_migration_flags    flags ,
+                             	cl_uint                   num_events_in_wait_list ,
+                             	const cl_event            *event_wait_list ,
+                             	cl_event                  *event );
+
+    cl_int clWaitForEvents(     cl_uint                   num_events,
+                                const cl_event            *event_list);
 
     cl_int clReleaseEvent(cl_event event);
 
@@ -368,6 +392,13 @@ def _initialize(backends):
                         cl_uint pipe_max_packets,
                         const cl_pipe_properties *properties,
                         cl_int *errcode_ret);
+
+    cl_int clGetPipeInfo(cl_mem    pipe,
+                  cl_pipe_info     param_name,
+                  size_t           param_value_size,
+                  void *           param_value,
+                  size_t *         param_value_size_ret);
+
 
     void *clSVMAlloc(cl_context context,
                      cl_svm_mem_flags flags,
@@ -595,6 +626,9 @@ cl_int clEnqueueReleaseGLObjects(cl_command_queue      command_queue,
                     const cl_event *      event_wait_list,
                     cl_event *            event);
 
+void * clGetExtensionFunctionAddressForPlatform(
+                    cl_platform_id * platform,
+                    const char * func_name );
 
 /* Deprecated OpenCL 1.1 APIs */
 cl_mem clCreateFromGLTexture2D(cl_context      context,

@@ -583,8 +583,6 @@ class Queue(CL):
         event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
 
-        print host_ptr
-
         n = self._lib.clEnqueueReadImage(
             self.handle, image.handle, blocking, origin_struct, region_struct,
             src_row_pitch, src_slice_pitch, host_ptr, n_events, wait_list, event)
@@ -1433,7 +1431,7 @@ class Image(CL, MemObject):
         """
         buf = cl.ffi.new("cl_image_format *")
         self._get_image_info(cl.CL_IMAGE_FORMAT, buf)
-        return int(buf[0])
+        return buf[0]
 
     @property
     def element_size(self):
