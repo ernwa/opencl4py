@@ -584,6 +584,12 @@ cl_int clGetGLContextInfoKHR(const cl_context_properties * properties,
                     void *                        param_value,
                     size_t *                       param_value_size_ret);
 
+cl_int clGetGLContextInfoAPPLE(const cl_context_properties * properties,
+                    cl_gl_context_info            param_name,
+                    size_t                        param_value_size,
+                    void *                        param_value,
+                    size_t *                       param_value_size_ret);
+
 
 cl_mem clCreateFromGLBuffer(cl_context     context,
                     cl_mem_flags   flags,

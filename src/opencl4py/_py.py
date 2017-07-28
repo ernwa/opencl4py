@@ -1158,12 +1158,14 @@ class Buffer(CL, MemObject):
         self._flags = flags
         return self
 
-    def __init__(self, context, flags, host_array, size=None,
+    def __init__(self, context, flags, host_array=None, size=None,
                  parent=None, origin=0):
         self._init_empty(context, flags)
         self._host_array = (host_array if flags & cl.CL_MEM_USE_HOST_PTR
                             else None)
         host_ptr, size = CL.extract_ptr_and_size(host_array, size)
+        # if host_array is not None:
+        #     print size, host_array.dtype, host_array.nbytes
         self._size = size
         self._origin = origin
         err = cl.ffi.new("cl_int *")
@@ -1218,7 +1220,7 @@ class Buffer(CL, MemObject):
         """
         return Buffer(self._context, flags, self._host_array, size or self.size,
                       self, origin)
-
+        
 
     def _add_ref(self, obj):
         self._n_refs += 1
@@ -2089,14 +2091,19 @@ class Context(CL):
             gl_ctx_props = Context._properties_list(gl_context_type, gl_context)
             print 'attempting to create cl context from gl context' # TODO: test and remove print statements
 
+            try:
+                clGetGLContextInfo = self._lib.clGetGLContextInfoKHR
+            except AttributeError:
+                clGetGLContextInfo = self._lib.clGetGLContextInfoAPPLE
+
             sizeof_device_id = cl.ffi.sizeof("cl_device_id")
             gl_device_id = cl.ffi.new("cl_device_id *")
             size_ret = cl.ffi.new("size_t *")
 
-            status = self._lib.clGetGLContextInfoKHR( gl_ctx_props,
+            status = clGetGLContextInfo( gl_ctx_props,
                     cl.CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR,
                     sizeof_device_id, gl_device_id, size_ret)
-            self.check_error(status, "clGetGLContextInfoKHR")
+            self.check_error(status, "clGetGLContextInfo")
             assert size_ret[0] == sizeof_device_id
 
             print "GL context's device ID is:", gl_device_id
