@@ -377,7 +377,7 @@ class Queue(CL):
         return self._device
 
     def execute_kernel(self, kernel, global_size, local_size,
-                       global_offset=None, wait_for=None, need_event=True):
+                       global_offset=None, wait_for=None, need_event=False):
         """Executes OpenCL kernel (calls clEnqueueNDRangeKernel).
 
         Parameters:
@@ -499,7 +499,7 @@ class Queue(CL):
                 int(cl.ffi.cast("size_t", ptr)))
 
 
-    def unmap(self, obj, ptr, wait_for=None, need_event=True):
+    def unmap(self, obj, ptr, wait_for=None, need_event=False):
         """Unmaps previously mapped object.
 
         Parameters:
@@ -574,9 +574,9 @@ class Queue(CL):
 
         if region is None:
             region = [ max(x, 1) for x in (
-                image.image_desc.image_width,
-                image.image_desc.image_height,
-                image.image_desc.image_depth) ]
+                image.width,
+                image.height,
+                image.depth) ]
 
         region = tuple(region) + (3-len(region)) * (1,)
         origin = tuple(origin) + (3-len(origin)) * (0,)
@@ -645,9 +645,9 @@ class Queue(CL):
 
         if region is None:
             region = [ max(x, 1) for x in (
-                image.image_desc.image_width,
-                image.image_desc.image_height,
-                image.image_desc.image_depth) ]
+                image.width,
+                image.height,
+                image.depth) ]
 
         region = tuple(region) + (3-len(region)) * (1,)
         origin = tuple(origin) + (3-len(origin)) * (0,)
@@ -687,9 +687,9 @@ class Queue(CL):
 
         if region is None:
             region = [ max(x, 1) for x in (
-                image.image_desc.image_width,
-                image.image_desc.image_height,
-                image.image_desc.image_depth) ]
+                image.width,
+                image.height,
+                image.depth) ]
 
         region = tuple(region) + (3-len(region)) * (1,)
         origin = tuple(origin) + (3-len(origin)) * (0,)
@@ -711,7 +711,7 @@ class Queue(CL):
 
 
     def copy_buffer(self, src, dst, src_offset=0, dst_offset=0, size=None,
-                    wait_for=None, need_event=True):
+                    wait_for=None, need_event=False):
         """Enqueues a command to copy from one buffer object to another.
 
         Parameters:
@@ -742,7 +742,7 @@ class Queue(CL):
     def copy_buffer_rect(self, src, dst, src_origin, dst_origin, region,
                          src_row_pitch=0, src_slice_pitch=0,
                          dst_row_pitch=0, dst_slice_pitch=0,
-                         wait_for=None, need_event=True):
+                         wait_for=None, need_event=False):
         """Enqueues a command to copy a 3D rectangular region from one
         buffer object to another.
 
@@ -809,9 +809,9 @@ class Queue(CL):
 
         if region is None:
             region = [ max(x, 1) for x in (
-                src_image.image_desc.image_width,
-                src_image.image_desc.image_height,
-                src_image.image_desc.image_depth) ]
+                src_image.width,
+                src_image.height,
+                src_image.depth) ]
 
         region = tuple(region) + (3-len(region)) * (1,)
 
@@ -851,9 +851,9 @@ class Queue(CL):
         """
         if region is None:
             region = [ max(x, 1) for x in (
-                src_image.image_desc.image_width,
-                src_image.image_desc.image_height,
-                src_image.image_desc.image_depth) ]
+                src_image.width,
+                src_image.height,
+                src_image.depth) ]
 
         region = tuple(region) + (3-len(region)) * (1,)
         src_origin = tuple(src_origin) + (3-len(src_origin)) * (0,)
@@ -893,9 +893,9 @@ class Queue(CL):
         """
         if region is None:
             region = [ max(x, 1) for x in (
-                dst_image.image_desc.image_width,
-                dst_image.image_desc.image_height,
-                dst_image.image_desc.image_depth) ]
+                dst_image.width,
+                dst_image.height,
+                dst_image.depth) ]
 
         region = tuple(region) + (3-len(region)) * (1,)
         dst_origin = tuple(dst_origin) + (3-len(dst_origin)) * (0,)
@@ -917,7 +917,7 @@ class Queue(CL):
 
 
     def fill_buffer(self, buf, pattern, pattern_size=None, size=None, offset=0, # FIXME: calculate size?
-                    wait_for=None, need_event=True):
+                    wait_for=None, need_event=False):
         """Enqueues a command to fill a region of a Buffer.
 
         Parameters:
@@ -977,7 +977,7 @@ class Queue(CL):
         return None if event == cl.ffi.NULL else Event(event[0])
 
 
-    def svm_unmap(self, svm_ptr, wait_for=None, need_event=True):
+    def svm_unmap(self, svm_ptr, wait_for=None, need_event=False):
         """Unmaps previously mapped SVM buffer.
 
         Parameters:
@@ -1027,7 +1027,7 @@ class Queue(CL):
 
 
     def svm_memfill(self, svm_ptr, pattern, pattern_size, size,     # TODO: remove need for explicit sizes
-                    wait_for=None, need_event=True):
+                    wait_for=None, need_event=False):
         """Enqueues a command to fill a region in memory with a pattern
         of a given pattern size.
 
@@ -1058,7 +1058,7 @@ class Queue(CL):
         return Event(event[0]) if event != cl.ffi.NULL else None
 
 
-    def acquire_gl_objects(self, mem_objects, wait_for=None, need_event=True):
+    def acquire_gl_objects(self, mem_objects, wait_for=None, need_event=False):
         """Acquire OpenCL memory objects that have been created from OpenGL objects.
 
         Parameters:
@@ -1084,7 +1084,7 @@ class Queue(CL):
         return Event(event[0]) if event != cl.ffi.NULL else None
 
 
-    def release_gl_objects(self, mem_objects, wait_for=None, need_event=True):
+    def release_gl_objects(self, mem_objects, wait_for=None, need_event=False):
         """Release OpenCL memory objects that have been created from OpenGL objects.
 
         Parameters:
@@ -1184,6 +1184,16 @@ class MemObject(object):    # implements clGetMemObjectInfo interface
            code, cl.ffi.sizeof(buf), buf, sz)
        self.check_error(err, 'clGetMemObjectInfo')
        return sz[0]
+
+    @property
+    def gl_object_info(self):
+        assert self.from_gl, 'Object is not shared with OpenGL'
+        gl_object_type = cl.ffi.new('cl_gl_object_type *')
+        gl_object_name = cl.ffi.new('cl_GLuint *')
+
+        err = self._lib.clGetGLObjectInfo( self.handle, gl_object_type, gl_object_name )
+        self.check_error(err, 'clGetGLObjectInfo')
+        return gl_object_type[0], gl_object_name[0]
 
 
 class Buffer(CL, MemObject):
@@ -1397,6 +1407,7 @@ class Image(CL, MemObject):
         self._handle = self._lib.clCreateImage(
             context.handle, flags, self.image_format, self.image_desc, host_ptr, err)
         self.check_error(err[0], 'clCreateImage')
+        self.from_gl = False
 
 
     @classmethod
@@ -1422,6 +1433,7 @@ class Image(CL, MemObject):
             context.handle, flags, renderbuffer, err)
 
         self.check_error(err[0], 'clCreateFromGLRenderbuffer')
+        self.from_gl = True
         return self
 
 
@@ -1449,6 +1461,7 @@ class Image(CL, MemObject):
             context.handle, flags, texture_target, miplevel, texture, err)
 
         self.check_error(err[0], 'clCreateFromGLTexture')
+        self.from_gl = True
         return self
 
 
@@ -2771,33 +2784,38 @@ class Platform(CL):
         super(Platform, self).__init__()
         self._handle = handle
         self._path = path
+        self._name = None
+        self._devices = None
+        self._extensions = None
 
-        sz = cl.ffi.new("size_t[]", 1)
-        nme = cl.ffi.new("char[]", 256)
-        n = self._lib.clGetPlatformInfo(handle, cl.CL_PLATFORM_NAME,
-                                        256, nme, sz)
-        self._name = ((b"".join(nme[0:sz[0] - 1])).decode("utf-8")
-                      if not n else None)
 
-        nn = cl.ffi.new("cl_uint[]", 1)
-        n = self._lib.clGetDeviceIDs(handle, cl.CL_DEVICE_TYPE_ALL,
-                                     0, cl.ffi.NULL, nn)
-        self.check_error(n, 'clGetDeviceIDs')
+    def _get_platform_info_str(self, name):
+        value = cl.ffi.new("char[]", 1024)
+        err = self._lib.clGetPlatformInfo(
+            self._handle, name, cl.ffi.sizeof(value), value, cl.ffi.NULL)
+        self.check_error(err, "clGetPlatformInfo")
+        return cl.ffi.string(value).decode("utf-8")
 
-        ids = cl.ffi.new("cl_device_id[]", nn[0])
-        n = self._lib.clGetDeviceIDs(handle, cl.CL_DEVICE_TYPE_ALL,
-                                     nn[0], ids, nn)
-        self.check_error(n, 'clGetDeviceIDs')
-
-        self._devices = list(Device(dev_id, self,
-                                    "%s:%d" % (self.path, dev_num))
-                             for dev_num, dev_id in enumerate(ids))
 
     @property
     def devices(self):
         """
         List of Device objects available on this platform.
         """
+        if not self._devices:
+            nn = cl.ffi.new("cl_uint[]", 1)
+            n = self._lib.clGetDeviceIDs(self.handle, cl.CL_DEVICE_TYPE_ALL,
+                                         0, cl.ffi.NULL, nn)
+            self.check_error(n, 'clGetDeviceIDs')
+
+            ids = cl.ffi.new("cl_device_id[]", nn[0])
+            n = self._lib.clGetDeviceIDs(self.handle, cl.CL_DEVICE_TYPE_ALL,
+                                         nn[0], ids, nn)
+            self.check_error(n, 'clGetDeviceIDs')
+
+            self._devices = list(Device(dev_id, self,
+                                        "%s:%d" % (self.path, dev_num))
+                                 for dev_num, dev_id in enumerate(ids))
         return self._devices
 
     @property
@@ -2805,6 +2823,8 @@ class Platform(CL):
         """
         OpenCL name of the platform.
         """
+        if not self._name:
+            self._name = self._get_platform_info_str(cl.CL_PLATFORM_NAME)
         return self._name
 
     @property
@@ -2814,8 +2834,17 @@ class Platform(CL):
         """
         return self._path
 
+    @property
+    def extensions(self):
+        if not self._extensions:
+            self._extensions = [ext.strip() for ext in self._get_platform_info_str(
+                cl.CL_PLATFORM_EXTENSIONS).split(' ')
+                if ext.strip()]
+        return self._extensions
+
     def __iter__(self):
         return iter(self.devices)
+
 
     def create_context(self, devices):
         """Creates OpenCL context on this platform and selected devices.
