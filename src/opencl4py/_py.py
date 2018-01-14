@@ -125,10 +125,10 @@ class CL(object):
         cl.CL_INVALID_IMAGE_DESCRIPTOR: "CL_INVALID_IMAGE_DESCRIPTOR",
         cl.CL_INVALID_COMPILER_OPTIONS: "CL_INVALID_COMPILER_OPTIONS",
         cl.CL_INVALID_LINKER_OPTIONS: "CL_INVALID_LINKER_OPTIONS",
-        cl.CL_INVALID_DEVICE_PARTITION_COUNT:
-        "CL_INVALID_DEVICE_PARTITION_COUNT",
+        cl.CL_INVALID_DEVICE_PARTITION_COUNT: "CL_INVALID_DEVICE_PARTITION_COUNT",
         cl.CL_INVALID_PIPE_SIZE: "CL_INVALID_PIPE_SIZE",
-        cl.CL_INVALID_DEVICE_QUEUE: "CL_INVALID_DEVICE_QUEUE"
+        cl.CL_INVALID_DEVICE_QUEUE: "CL_INVALID_DEVICE_QUEUE",
+        cl.CL_INVALID_GL_CONTEXT_APPLE: "CL_INVALID_GL_CONTEXT_APPLE"
     }
 
 
@@ -1058,6 +1058,59 @@ class Queue(CL):
         return Event(event[0]) if event != cl.ffi.NULL else None
 
 
+    def acquire_gl_objects(self, mem_objects, wait_for=None, need_event=True):
+        """Acquire OpenCL memory objects that have been created from OpenGL objects.
+
+        Parameters:
+            mem_objects: iterable of MemObject instances to acquire control of
+            wait_for: list of the Event objects to wait.
+            need_event: return Event object or not.
+
+        Returns:
+            Event object or None if need_event == False.
+        """
+
+        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        wait_list, n_events = CL.get_wait_list(wait_for)
+
+        mem_object_arr = cl.ffi.new("cl_mem[]", len(mem_objects))
+        for i, o in enumerate(mem_objects):
+            mem_object_arr[i] = o.handle
+
+        err = self._lib.clEnqueueAcquireGLObjects(
+                self.handle, len(mem_objects), mem_object_arr,
+                n_events, wait_list, event)
+        self.check_error(err, "clEnqueueAcquireGLObjects")
+        return Event(event[0]) if event != cl.ffi.NULL else None
+
+
+    def release_gl_objects(self, mem_objects, wait_for=None, need_event=True):
+        """Release OpenCL memory objects that have been created from OpenGL objects.
+
+        Parameters:
+            mem_objects: iterable of MemObject instances to release control of
+            wait_for: list of the Event objects to wait.
+            need_event: return Event object or not.
+
+        Returns:
+            Event object or None if need_event == False.
+        """
+
+        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        wait_list, n_events = CL.get_wait_list(wait_for)
+
+        mem_object_arr = cl.ffi.new("cl_mem[]", len(mem_objects))
+        for i, o in enumerate(mem_objects):
+            mem_object_arr[i] = o.handle
+
+        err = self._lib.clEnqueueReleaseGLObjects(
+                self.handle, len(mem_objects), mem_object_arr,
+                n_events, wait_list, event)
+        self.check_error(err, "clEnqueueReleaseGLObjects")
+        return Event(event[0]) if event != cl.ffi.NULL else None
+
+
+
     def flush(self):
         """Flushes the queue.
         """
@@ -1396,6 +1449,7 @@ class Image(CL, MemObject):
             context.handle, flags, texture_target, miplevel, texture, err)
 
         self.check_error(err[0], 'clCreateFromGLTexture')
+        return self
 
 
     def _add_ref(self, obj):
@@ -2080,56 +2134,79 @@ class Context(CL):
             pobj[i] = cl.ffi.cast("cl_context_properties", a)
         return pobj
 
-    def __init__(self, platform, devices=[], gl_context=None):
+    def _init_empty(self):
         super(Context, self).__init__()
         self._n_refs = 1
-        self._platform = platform
-        self._devices = devices # FIXME: need to reconstitute device list from context when using opengl sharing
 
+    @classmethod
+    def from_current_gl_context(cls):
+        self = cls.__new__(cls)
+        self._init_empty()
+        err = cl.ffi.new("cl_int *")
 
-        if gl_context:
-            if gl_context is True:    # guess context, etc
-                if sys.platform == 'darwin':
-                    gl_context = cl.gllib.CGLGetShareGroup( cl.gllib.CGLGetCurrentContext() )
-                    plist = [cl.CL_CONTEXT_PROPERTY_USE_CGL_SHAREGROUP_APPLE, gl_context]
-                    n_devices = 0   # FIXME: improve this flow
-                    assert len(devices) == 0
-                    device_list = cl.ffi.NULL
-                else:
-                    assert False, 'not implemented'
-            else:                    # FIXME: somehow pass in context or something
-                try:
-                    clGetGLContextInfo = self._lib.clGetGLContextInfoKHR
-                except AttributeError:
-                    clGetGLContextInfo = self._lib.clGetGLContextInfoAPPLE
+        if sys.platform == 'darwin':
+            gl_context = cl.gllib.CGLGetCurrentContext()
+            gl_sharegroup = cl.gllib.CGLGetShareGroup( gl_context )
+            plist = Context._properties_list(
+                cl.CL_CONTEXT_PROPERTY_USE_CGL_SHAREGROUP_APPLE, gl_sharegroup )
 
+            self._handle = self._lib.clCreateContext(
+                plist, 0, cl.ffi.NULL, cl.ffi.NULL, cl.ffi.NULL, err)
+            self.check_error(err[0], "clCreateContext")
 
-                gl_ctx_props = Context._properties_list(cl.CL_GL_CONTEXT_KHR, gl_context)
-                sizeof_device_id = cl.ffi.sizeof("cl_device_id")
-                gl_device_id = cl.ffi.new("cl_device_id *")
-                size_ret = cl.ffi.new("size_t *")
+            sizeof_device_id = cl.ffi.sizeof("cl_device_id")
+            cl_device_id = cl.ffi.new("cl_device_id *")
+            size_ret = cl.ffi.new("size_t *")
 
-                status = clGetGLContextInfo( gl_ctx_props,
-                        cl.CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR,
-                        sizeof_device_id, gl_device_id, size_ret)
-
-                self.check_error(status, "clGetGLContextInfo")
-                assert size_ret[0] == sizeof_device_id
-
-                print "GL context's device ID is:", gl_device_id
-                device_list = cl.ffi.new("cl_device_id*", gl_device_id)
-                n_devices = 1
-
-
+            status = self._lib.clGetGLContextInfoAPPLE(
+                self._handle, gl_context,
+                cl.CL_CGL_DEVICE_FOR_CURRENT_VIRTUAL_SCREEN_APPLE,
+                sizeof_device_id, cl_device_id, size_ret )
+            self.check_error(status, "clGetGLContextInfoAPPLE")
+            assert size_ret[0] == sizeof_device_id, 'No devices found!'
         else:
-            plist = [cl.CL_CONTEXT_PLATFORM, platform.handle]
-            # if gl_context:
-            #     plist += [gl_context_type, gl_context]
+            raise NotImplementedError("GLX & WGL not yet implemented")
 
-            n_devices = len(devices)
-            device_list = cl.ffi.new("cl_device_id[]", len(devices))
-            for i, dev in enumerate(devices):
-                device_list[i] = dev.handle
+    #             clGetGLContextInfo = self._lib.clGetGLContextInfoKHR
+        #
+        #
+        #         gl_ctx_props = Context._properties_list(cl.CL_GL_CONTEXT_KHR, gl_context)
+        #         sizeof_device_id = cl.ffi.sizeof("cl_device_id")
+        #         gl_device_id = cl.ffi.new("cl_device_id *")
+        #         size_ret = cl.ffi.new("size_t *")
+        #
+        #         status = clGetGLContextInfo( gl_ctx_props,
+        #                 cl.CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR,
+        #                 sizeof_device_id, gl_device_id, size_ret)
+        #
+        #         self.check_error(status, "clGetGLContextInfo")
+        #         assert size_ret[0] == sizeof_device_id
+        #
+        #         print "GL context's device ID is:", gl_device_id
+        #         device_list = cl.ffi.new("cl_device_id*", gl_device_id)
+        #         n_devices = 1
+
+
+#        print "GL context's device ID is:", cl_device_id[0]
+
+        self._devices = [Device(cl_device_id[0])]
+        self._platform = self._devices[0].platform
+        return self
+
+
+    def __init__(self, platform, devices=[]):
+        self._init_empty()
+        self._platform = platform
+        self._devices = devices
+
+        plist = [cl.CL_CONTEXT_PLATFORM, platform.handle]
+        # if gl_context:
+        #     plist += [gl_context_type, gl_context]
+
+        n_devices = len(devices)
+        device_list = cl.ffi.new("cl_device_id[]", len(devices))
+        for i, dev in enumerate(devices):
+            device_list[i] = dev.handle
 
         new_ctx_props = Context._properties_list(*plist)
 
@@ -2304,11 +2381,12 @@ class Device(CL):
         memsize: global memory size of the device.
         memalign: align in bytes, required for clMapBuffer.
     """
-    def __init__(self, handle, platform, path):
+
+    def __init__(self, handle, platform=None, path="?"):
         super(Device, self).__init__()
         self._handle = handle
-        self._platform = platform
-        self._path = path
+        self._platform = platform or Platform(self.platform_id)
+        self._path = path # TODO: eventually want to reconstitute this
 
         self._version_string = self._get_device_info_str(
             cl.CL_DEVICE_OPENCL_C_VERSION)
@@ -2325,6 +2403,10 @@ class Device(CL):
         Platform object associated with this device.
         """
         return self._platform
+
+    @property
+    def platform_id(self):
+        return self._get_device_info_voidp(cl.CL_DEVICE_PLATFORM)
 
     @property
     def type(self):
@@ -2666,6 +2748,13 @@ class Device(CL):
         self.check_error(err, "clGetDeviceInfo")
         return cl.ffi.string(value).decode("utf-8")
 
+    def _get_device_info_voidp(self, name):
+        value = cl.ffi.new("void**")
+        err = self._lib.clGetDeviceInfo(
+            self._handle, name, cl.ffi.sizeof(value), value, cl.ffi.NULL)
+        self.check_error(err, "clGetDeviceInfo")
+        return value[0]
+
     def __repr__(self):
         return '<opencl4py.Device %r>' % self.name
 
@@ -2678,7 +2767,7 @@ class Platform(CL):
         name: OpenCL name of the platform.
         path: opencl4py platform identifier.
     """
-    def __init__(self, handle, path):
+    def __init__(self, handle, path="?"):
         super(Platform, self).__init__()
         self._handle = handle
         self._path = path
@@ -2702,7 +2791,7 @@ class Platform(CL):
 
         self._devices = list(Device(dev_id, self,
                                     "%s:%d" % (self.path, dev_num))
-                             for dev_id, dev_num in zip(ids, range(len(ids))))
+                             for dev_num, dev_id in enumerate(ids))
 
     @property
     def devices(self):
@@ -2761,7 +2850,7 @@ class Platforms(CL):
         self.check_error(n, 'clGetPlatformIDs')
 
         self._platforms = list(Platform(p_id, str(p_num))
-                               for p_id, p_num in zip(ids, range(len(ids))))
+                               for p_num, p_id in enumerate(ids))
 
     @property
     def platforms(self):

@@ -64,14 +64,15 @@ CL_INVALID_PIPE_SIZE =                        -69
 CL_INVALID_DEVICE_QUEUE =                     -70
 CL_INVALID_SPEC_ID =                          -71
 CL_MAX_SIZE_RESTRICTION_EXCEEDED =            -72
+CL_INVALID_GL_CONTEXT_APPLE =                 -1000
 
 #  OpenCL Version
-CL_VERSION_1_0 =                              1
-CL_VERSION_1_1 =                              1
-CL_VERSION_1_2 =                              1
-CL_VERSION_2_0 =                              1
-CL_VERSION_2_1 =                              1
-CL_VERSION_2_2 =                              1
+# CL_VERSION_1_0 =                              1
+# CL_VERSION_1_1 =                              1
+# CL_VERSION_1_2 =                              1
+# CL_VERSION_2_0 =                              1
+# CL_VERSION_2_1 =                              1
+# CL_VERSION_2_2 =                              1
 
 #  cl_bool
 CL_FALSE =                                    0
@@ -561,4 +562,9 @@ CL_WGL_HDC_KHR                          = 0x200B
 CL_CGL_SHAREGROUP_KHR                   = 0x200C
 
 CL_COMMAND_GL_FENCE_SYNC_OBJECT_KHR     = 0x200D
-CL_CONTEXT_PROPERTY_USE_CGL_SHAREGROUP_APPLE  = 0x10000000
+
+# Apple bullshit
+
+CL_CONTEXT_PROPERTY_USE_CGL_SHAREGROUP_APPLE        =   0x10000000
+CL_CGL_DEVICE_FOR_CURRENT_VIRTUAL_SCREEN_APPLE 	    =	0x10000002
+CL_CGL_DEVICES_FOR_SUPPORTED_VIRTUAL_SCREENS_APPLE	=   0x10000003

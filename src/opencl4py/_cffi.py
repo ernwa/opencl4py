@@ -553,15 +553,16 @@ clsrc = """
                    const cl_event * event_wait_list,
                    cl_event * event);
 
-cl_int clEnqueueCopyBufferToImage(cl_command_queue command_queue,
-                   cl_mem src_buffer,
-                   cl_mem dst_image,
-                   size_t src_offset,
-                   const size_t * origin /* [3] */,
-                   const size_t * region /* [3] */,
-                   cl_uint num_events_in_wait_list,
-                   const cl_event * event_wait_list,
-                   cl_event * event);
+cl_int clEnqueueCopyBufferToImage(
+                   cl_command_queue         command_queue,
+                   cl_mem                   src_buffer,
+                   cl_mem                   dst_image,
+                   size_t                   src_offset,
+                   const size_t *           origin /* [3] */,
+                   const size_t *           region /* [3] */,
+                   cl_uint                  num_events_in_wait_list,
+                   const cl_event *         event_wait_list,
+                   cl_event *               event);
 
 /* OPENGL INTEROP! */
     typedef int          cl_GLint;
@@ -573,54 +574,63 @@ cl_int clEnqueueCopyBufferToImage(cl_command_queue command_queue,
     typedef cl_uint     cl_gl_context_info;
 
 
-cl_int clGetGLContextInfoKHR(const cl_context_properties * properties,
-                    cl_gl_context_info            param_name,
-                    size_t                        param_value_size,
-                    void *                        param_value,
-                    size_t *                       param_value_size_ret);
+cl_int clGetGLContextInfoKHR(
+                    cl_context_properties * properties,
+                    cl_gl_context_info      param_name,
+                    size_t                  param_value_size,
+                    void *                  param_value,
+                    size_t *                param_value_size_ret);
 
-cl_int clGetGLContextInfoAPPLE(const cl_context_properties * properties,
-                    cl_gl_context_info            param_name,
-                    size_t                        param_value_size,
-                    void *                        param_value,
-                    size_t *                       param_value_size_ret);
+cl_int	clGetGLContextInfoAPPLE(
+                    cl_context             context,
+					void *                 platform_gl_ctx,
+					cl_gl_platform_info    param_name,
+					size_t                 param_value_size,
+					void *                 param_value,
+					size_t *               param_value_size_ret);
 
+cl_mem clCreateFromGLBuffer(
+                    cl_context              context,
+                    cl_mem_flags            flags,
+                    cl_GLuint               bufobj,
+                    int *                   errcode_ret);
 
-cl_mem clCreateFromGLBuffer(cl_context     context,
-                    cl_mem_flags   flags,
-                    cl_GLuint      bufobj,
-                    int *          errcode_ret);
+cl_mem clCreateFromGLTexture(
+                    cl_context              context,
+                    cl_mem_flags            flags,
+                    cl_GLenum               target,
+                    cl_GLint                miplevel,
+                    cl_GLuint               texture,
+                    cl_int *                errcode_ret);
 
-cl_mem clCreateFromGLTexture(cl_context      context,
-                    cl_mem_flags    flags,
-                    cl_GLenum       target,
-                    cl_GLint        miplevel,
-                    cl_GLuint       texture,
-                    cl_int *        errcode_ret);
+cl_mem clCreateFromGLRenderbuffer(
+                    cl_context              context,
+                    cl_mem_flags            flags,
+                    cl_GLuint               renderbuffer,
+                    cl_int *                errcode_ret);
 
-cl_mem clCreateFromGLRenderbuffer(cl_context   context,
-                    cl_mem_flags flags,
-                    cl_GLuint    renderbuffer,
-                    cl_int *     errcode_ret);
-
-cl_int clGetGLObjectInfo(cl_mem                memobj,
+cl_int clGetGLObjectInfo(
+                    cl_mem                memobj,
                     cl_gl_object_type *   gl_object_type,
                     cl_GLuint *           gl_object_name);
 
-cl_int clGetGLTextureInfo(cl_mem               memobj,
+cl_int clGetGLTextureInfo(
+                    cl_mem               memobj,
                     cl_gl_texture_info   param_name,
                     size_t               param_value_size,
                     void *               param_value,
                     size_t *             param_value_size_ret);
 
-cl_int clEnqueueAcquireGLObjects(cl_command_queue      command_queue,
+cl_int clEnqueueAcquireGLObjects(
+                    cl_command_queue      command_queue,
                     cl_uint               num_objects,
                     const cl_mem *        mem_objects,
                     cl_uint               num_events_in_wait_list,
                     const cl_event *      event_wait_list,
                     cl_event *            event);
 
-cl_int clEnqueueReleaseGLObjects(cl_command_queue      command_queue,
+cl_int clEnqueueReleaseGLObjects(
+                    cl_command_queue      command_queue,
                     cl_uint               num_objects,
                     const cl_mem *        mem_objects,
                     cl_uint               num_events_in_wait_list,
@@ -628,8 +638,8 @@ cl_int clEnqueueReleaseGLObjects(cl_command_queue      command_queue,
                     cl_event *            event);
 
 void * clGetExtensionFunctionAddressForPlatform(
-                    cl_platform_id * platform,
-                    const char * func_name );
+                    cl_platform_id *      platform,
+                    const char *          func_name );
 
 /* Deprecated OpenCL 1.1 APIs */
 cl_mem clCreateFromGLTexture2D(cl_context      context,
