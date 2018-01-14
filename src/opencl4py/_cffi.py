@@ -43,16 +43,11 @@ from _cl_defines import *
 ffi = None
 #: Loaded shared library
 lib = None
+gllib = None
 #: Lock
 lock = threading.Lock()
 
-
-def _initialize(backends):
-    global lib
-    if lib is not None:
-        return
-    # C function definitions
-    src = """
+clsrc = """
     typedef int32_t             cl_int;
     typedef uint32_t            cl_uint;
     typedef uint64_t            cl_ulong;
@@ -164,7 +159,7 @@ def _initialize(backends):
     cl_context clCreateContext(const cl_context_properties *properties,
                                cl_uint num_devices,
                                const cl_device_id *devices,
-                               void *pfn_notify,
+                               void *p_notify,
                                void *user_data,
                                cl_int *errcode_ret);
 
@@ -190,7 +185,7 @@ def _initialize(backends):
                           cl_uint num_devices,
                           const cl_device_id *device_list,
                           const char *options,
-                          void *pfn_notify,
+                          void *p_notify,
                           void *user_data);
 
     cl_int clGetProgramBuildInfo(cl_program program,
@@ -656,29 +651,35 @@ cl_event clCreateEventFromGLsyncKHR(
                            cl_GLsync cl_GLsync,
                            cl_int errcode_ret);
 
+    typedef void * CGLContextObj;
+    typedef void * CGLShareGroupObj;
+    CGLContextObj CGLGetCurrentContext(void);
+    CGLShareGroupObj CGLGetShareGroup(CGLContextObj ctx);
+
 """
 
-    # Parse
-    global ffi
-    ffi = cffi.FFI()
-    ffi.cdef(src)
-
-    # Load library
-    for libnme in backends:
-        try:
-            lib = ffi.dlopen(libnme)
-            break
-        except OSError:
-            pass
-    else:
-        ffi = None
-        raise OSError("Could not load OpenCL library")
-
-
-def initialize(backends=("libOpenCL.so", "OpenCL.dll", "OpenCL")):
-    global lib
-    if lib is not None:
-        return
-    global lock
+def initialize(
+        backends=("libOpenCL.so", "OpenCL.dll", "OpenCL"),
+        gl_backends=("OpenGL",)):    # FIXME: add WGL & GLX
+    global lib, ffi, gllib, lock
     with lock:
-        _initialize(backends)
+        ffi = cffi.FFI()
+        ffi.cdef(clsrc)
+
+        if lib is None:
+            for fnlib in backends:
+                try:
+                    lib = ffi.dlopen(fnlib)
+                    break
+                except OSError:
+                    pass
+            else:
+                raise OSError("Could not load OpenCL library")
+
+        if gllib is None:
+            for fnlib in gl_backends:
+                try:
+                    gllib = ffi.dlopen(fnlib)
+                    break
+                except OSError:
+                    pass

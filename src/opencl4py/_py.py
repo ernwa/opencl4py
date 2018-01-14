@@ -37,6 +37,7 @@ Original author: Alexey Kazantsev <a.kazantsev@samsung.com>
 Helper classes for OpenCL cffi bindings.
 """
 import opencl4py._cffi as cl
+import sys
 
 def ensure_type(typespec, obj, cast=False):
     if not isinstance(obj, cl.ffi.CData):  # cffi object
@@ -176,6 +177,7 @@ class CL(object):
 
     def __init__(self):
         self._lib = cl.lib  # to hold the reference
+        self._gllib = cl.gllib
         self._handle = None
 
     def check_error(self, err, funcname):
@@ -468,7 +470,7 @@ class Queue(CL):
                 int(row_pitch[0]), int(slice_pitch[0]))
 
 
-    def map_buffer(self, buf, flags, size=None, blocking=True, offset=0,
+    def map_buffer(self, buf, flags=cl.CL_MEM_READ_WRITE, size=None, blocking=True, offset=0,
                    wait_for=None, need_event=False):
         """Maps buffer.
 
@@ -519,6 +521,7 @@ class Queue(CL):
         return Event(event[0]) if event != cl.ffi.NULL else None
 
     unmap_buffer = unmap
+    unmap_image = unmap
 
 
     def read_buffer(self, buf, host_array, blocking=True, size=None, offset=0,
@@ -1220,7 +1223,7 @@ class Buffer(CL, MemObject):
         """
         return Buffer(self._context, flags, self._host_array, size or self.size,
                       self, origin)
-        
+
 
     def _add_ref(self, obj):
         self._n_refs += 1
@@ -2077,40 +2080,54 @@ class Context(CL):
             pobj[i] = cl.ffi.cast("cl_context_properties", a)
         return pobj
 
-    def __init__(self, platform, devices=None, gl_context=None, gl_context_type=cl.CL_GL_CONTEXT_KHR):
+    def __init__(self, platform, devices=[], gl_context=None):
         super(Context, self).__init__()
         self._n_refs = 1
         self._platform = platform
-        self._devices = devices
+        self._devices = devices # FIXME: need to reconstitute device list from context when using opengl sharing
 
-        plist = [cl.CL_CONTEXT_PLATFORM, platform.handle]
+
         if gl_context:
-            plist += [gl_context_type, gl_context]
+            if gl_context is True:    # guess context, etc
+                if sys.platform == 'darwin':
+                    gl_context = cl.gllib.CGLGetShareGroup( cl.gllib.CGLGetCurrentContext() )
+                    plist = [cl.CL_CONTEXT_PROPERTY_USE_CGL_SHAREGROUP_APPLE, gl_context]
+                    n_devices = 0   # FIXME: improve this flow
+                    assert len(devices) == 0
+                    device_list = cl.ffi.NULL
+                else:
+                    assert False, 'not implemented'
+            else:                    # FIXME: somehow pass in context or something
+                try:
+                    clGetGLContextInfo = self._lib.clGetGLContextInfoKHR
+                except AttributeError:
+                    clGetGLContextInfo = self._lib.clGetGLContextInfoAPPLE
 
-        if not devices:
-            gl_ctx_props = Context._properties_list(gl_context_type, gl_context)
-            print 'attempting to create cl context from gl context' # TODO: test and remove print statements
 
-            try:
-                clGetGLContextInfo = self._lib.clGetGLContextInfoKHR
-            except AttributeError:
-                clGetGLContextInfo = self._lib.clGetGLContextInfoAPPLE
+                gl_ctx_props = Context._properties_list(cl.CL_GL_CONTEXT_KHR, gl_context)
+                sizeof_device_id = cl.ffi.sizeof("cl_device_id")
+                gl_device_id = cl.ffi.new("cl_device_id *")
+                size_ret = cl.ffi.new("size_t *")
 
-            sizeof_device_id = cl.ffi.sizeof("cl_device_id")
-            gl_device_id = cl.ffi.new("cl_device_id *")
-            size_ret = cl.ffi.new("size_t *")
+                status = clGetGLContextInfo( gl_ctx_props,
+                        cl.CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR,
+                        sizeof_device_id, gl_device_id, size_ret)
 
-            status = clGetGLContextInfo( gl_ctx_props,
-                    cl.CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR,
-                    sizeof_device_id, gl_device_id, size_ret)
-            self.check_error(status, "clGetGLContextInfo")
-            assert size_ret[0] == sizeof_device_id
+                self.check_error(status, "clGetGLContextInfo")
+                assert size_ret[0] == sizeof_device_id
 
-            print "GL context's device ID is:", gl_device_id
-            device_list = cl.ffi.new("cl_device_id*", gl_device_id)
+                print "GL context's device ID is:", gl_device_id
+                device_list = cl.ffi.new("cl_device_id*", gl_device_id)
+                n_devices = 1
+
+
         else:
+            plist = [cl.CL_CONTEXT_PLATFORM, platform.handle]
+            # if gl_context:
+            #     plist += [gl_context_type, gl_context]
+
             n_devices = len(devices)
-            device_list = cl.ffi.new("cl_device_id[]", n_devices)
+            device_list = cl.ffi.new("cl_device_id[]", len(devices))
             for i, dev in enumerate(devices):
                 device_list[i] = dev.handle
 
