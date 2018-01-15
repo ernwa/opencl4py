@@ -65,7 +65,7 @@ CL_INVALID_DEVICE_QUEUE =                     -70
 CL_INVALID_SPEC_ID =                          -71
 CL_MAX_SIZE_RESTRICTION_EXCEEDED =            -72
 CL_INVALID_GL_CONTEXT_APPLE =                 -1000
-
+CL_INVALID_GL_SHAREGROUP_REFERENCE_KHR  =     -1000
 #  OpenCL Version
 # CL_VERSION_1_0 =                              1
 # CL_VERSION_1_1 =                              1
@@ -546,9 +546,6 @@ CL_GL_OBJECT_TEXTURE_BUFFER     =        0x2011
 CL_GL_TEXTURE_TARGET =                   0x2004
 CL_GL_MIPMAP_LEVEL   =                   0x2005
 CL_GL_NUM_SAMPLES    =                   0x2012
-
-# Additional Error Codes
-CL_INVALID_GL_SHAREGROUP_REFERENCE_KHR  = -1000
 
 # cl_gl_context_info
 CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR    = 0x2006

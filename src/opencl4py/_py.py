@@ -47,6 +47,12 @@ def ensure_type(typespec, obj, cast=False):
     return obj
 
 
+def lookup_const(name):
+    return cl.__dict__[name]
+
+def name_lookup_table(*names):
+    return { cl.__dict__[name]: name for name in names }
+
 class CLRuntimeError(RuntimeError):
     def __init__(self, msg, code):
         super(CLRuntimeError, self).__init__(msg)
@@ -61,119 +67,58 @@ class CL(object):
         _handle: cffi handle to OpenCL object.
     """
 
-    ERRORS = {
-        cl.CL_SUCCESS: "CL_SUCCESS",
-        cl.CL_DEVICE_NOT_FOUND: "CL_DEVICE_NOT_FOUND",
-        cl.CL_DEVICE_NOT_AVAILABLE: "CL_DEVICE_NOT_AVAILABLE",
-        cl.CL_COMPILER_NOT_AVAILABLE: "CL_COMPILER_NOT_AVAILABLE",
-        cl.CL_MEM_OBJECT_ALLOCATION_FAILURE:
-        "CL_MEM_OBJECT_ALLOCATION_FAILURE",
-        cl.CL_OUT_OF_RESOURCES: "CL_OUT_OF_RESOURCES",
-        cl.CL_OUT_OF_HOST_MEMORY: "CL_OUT_OF_HOST_MEMORY",
-        cl.CL_PROFILING_INFO_NOT_AVAILABLE: "CL_PROFILING_INFO_NOT_AVAILABLE",
-        cl.CL_MEM_COPY_OVERLAP: "CL_MEM_COPY_OVERLAP",
-        cl.CL_IMAGE_FORMAT_MISMATCH: "CL_IMAGE_FORMAT_MISMATCH",
-        cl.CL_IMAGE_FORMAT_NOT_SUPPORTED: "CL_IMAGE_FORMAT_NOT_SUPPORTED",
-        cl.CL_BUILD_PROGRAM_FAILURE: "CL_BUILD_PROGRAM_FAILURE",
-        cl.CL_MAP_FAILURE: "CL_MAP_FAILURE",
-        cl.CL_MISALIGNED_SUB_BUFFER_OFFSET: "CL_MISALIGNED_SUB_BUFFER_OFFSET",
-        cl.CL_EXEC_STATUS_ERROR_FOR_EVENTS_IN_WAIT_LIST:
-        "CL_EXEC_STATUS_ERROR_FOR_EVENTS_IN_WAIT_LIST",
-        cl.CL_COMPILE_PROGRAM_FAILURE: "CL_COMPILE_PROGRAM_FAILURE",
-        cl.CL_LINKER_NOT_AVAILABLE: "CL_LINKER_NOT_AVAILABLE",
-        cl.CL_LINK_PROGRAM_FAILURE: "CL_LINK_PROGRAM_FAILURE",
-        cl.CL_DEVICE_PARTITION_FAILED: "CL_DEVICE_PARTITION_FAILED",
-        cl.CL_KERNEL_ARG_INFO_NOT_AVAILABLE:
-        "CL_KERNEL_ARG_INFO_NOT_AVAILABLE",
+    ERRORS = name_lookup_table(
+        "CL_SUCCESS", "CL_DEVICE_NOT_FOUND", "CL_DEVICE_NOT_AVAILABLE",
+        "CL_COMPILER_NOT_AVAILABLE", "CL_MEM_OBJECT_ALLOCATION_FAILURE",
+        "CL_OUT_OF_RESOURCES", "CL_OUT_OF_HOST_MEMORY", "CL_PROFILING_INFO_NOT_AVAILABLE",
+        "CL_MEM_COPY_OVERLAP", "CL_IMAGE_FORMAT_MISMATCH", "CL_IMAGE_FORMAT_NOT_SUPPORTED",
+        "CL_BUILD_PROGRAM_FAILURE", "CL_MAP_FAILURE", "CL_MISALIGNED_SUB_BUFFER_OFFSET",
+        "CL_EXEC_STATUS_ERROR_FOR_EVENTS_IN_WAIT_LIST", "CL_COMPILE_PROGRAM_FAILURE",
+        "CL_LINKER_NOT_AVAILABLE", "CL_LINK_PROGRAM_FAILURE", "CL_DEVICE_PARTITION_FAILED",
+        "CL_KERNEL_ARG_INFO_NOT_AVAILABLE", "CL_INVALID_VALUE", "CL_INVALID_DEVICE_TYPE",
+        "CL_INVALID_PLATFORM", "CL_INVALID_DEVICE", "CL_INVALID_CONTEXT",
+        "CL_INVALID_QUEUE_PROPERTIES", "CL_INVALID_COMMAND_QUEUE","CL_INVALID_HOST_PTR",
+        "CL_INVALID_MEM_OBJECT", "CL_INVALID_IMAGE_FORMAT_DESCRIPTOR",
+        "CL_INVALID_IMAGE_SIZE","CL_INVALID_SAMPLER", "CL_INVALID_BINARY",
+        "CL_INVALID_BUILD_OPTIONS", "CL_INVALID_PROGRAM", "CL_INVALID_PROGRAM_EXECUTABLE",
+        "CL_INVALID_KERNEL_NAME", "CL_INVALID_KERNEL_DEFINITION", "CL_INVALID_KERNEL",
+        "CL_INVALID_ARG_INDEX", "CL_INVALID_ARG_VALUE", "CL_INVALID_ARG_SIZE",
+        "CL_INVALID_KERNEL_ARGS", "CL_INVALID_WORK_DIMENSION", "CL_INVALID_WORK_GROUP_SIZE",
+        "CL_INVALID_WORK_ITEM_SIZE", "CL_INVALID_GLOBAL_OFFSET", "CL_INVALID_EVENT_WAIT_LIST",
+        "CL_INVALID_EVENT", "CL_INVALID_OPERATION", "CL_INVALID_GL_OBJECT",
+        "CL_INVALID_BUFFER_SIZE","CL_INVALID_MIP_LEVEL", "CL_INVALID_GLOBAL_WORK_SIZE",
+        "CL_INVALID_PROPERTY", "CL_INVALID_IMAGE_DESCRIPTOR", "CL_INVALID_COMPILER_OPTIONS",
+        "CL_INVALID_LINKER_OPTIONS", "CL_INVALID_DEVICE_PARTITION_COUNT",
+        "CL_INVALID_PIPE_SIZE", "CL_INVALID_DEVICE_QUEUE",
+        "CL_INVALID_GL_SHAREGROUP_REFERENCE_KHR" )
 
-        cl.CL_INVALID_VALUE: "CL_INVALID_VALUE",
-        cl.CL_INVALID_DEVICE_TYPE: "CL_INVALID_DEVICE_TYPE",
-        cl.CL_INVALID_PLATFORM: "CL_INVALID_PLATFORM",
-        cl.CL_INVALID_DEVICE: "CL_INVALID_DEVICE",
-        cl.CL_INVALID_CONTEXT: "CL_INVALID_CONTEXT",
-        cl.CL_INVALID_QUEUE_PROPERTIES: "CL_INVALID_QUEUE_PROPERTIES",
-        cl.CL_INVALID_COMMAND_QUEUE: "CL_INVALID_COMMAND_QUEUE",
-        cl.CL_INVALID_HOST_PTR: "CL_INVALID_HOST_PTR",
-        cl.CL_INVALID_MEM_OBJECT: "CL_INVALID_MEM_OBJECT",
-        cl.CL_INVALID_IMAGE_FORMAT_DESCRIPTOR:
-        "CL_INVALID_IMAGE_FORMAT_DESCRIPTOR",
-        cl.CL_INVALID_IMAGE_SIZE: "CL_INVALID_IMAGE_SIZE",
-        cl.CL_INVALID_SAMPLER: "CL_INVALID_SAMPLER",
-        cl.CL_INVALID_BINARY: "CL_INVALID_BINARY",
-        cl.CL_INVALID_BUILD_OPTIONS: "CL_INVALID_BUILD_OPTIONS",
-        cl.CL_INVALID_PROGRAM: "CL_INVALID_PROGRAM",
-        cl.CL_INVALID_PROGRAM_EXECUTABLE: "CL_INVALID_PROGRAM_EXECUTABLE",
-        cl.CL_INVALID_KERNEL_NAME: "CL_INVALID_KERNEL_NAME",
-        cl.CL_INVALID_KERNEL_DEFINITION: "CL_INVALID_KERNEL_DEFINITION",
-        cl.CL_INVALID_KERNEL: "CL_INVALID_KERNEL",
-        cl.CL_INVALID_ARG_INDEX: "CL_INVALID_ARG_INDEX",
-        cl.CL_INVALID_ARG_VALUE: "CL_INVALID_ARG_VALUE",
-        cl.CL_INVALID_ARG_SIZE: "CL_INVALID_ARG_SIZE",
-        cl.CL_INVALID_KERNEL_ARGS: "CL_INVALID_KERNEL_ARGS",
-        cl.CL_INVALID_WORK_DIMENSION: "CL_INVALID_WORK_DIMENSION",
-        cl.CL_INVALID_WORK_GROUP_SIZE: "CL_INVALID_WORK_GROUP_SIZE",
-        cl.CL_INVALID_WORK_ITEM_SIZE: "CL_INVALID_WORK_ITEM_SIZE",
-        cl.CL_INVALID_GLOBAL_OFFSET: "CL_INVALID_GLOBAL_OFFSET",
-        cl.CL_INVALID_EVENT_WAIT_LIST: "CL_INVALID_EVENT_WAIT_LIST",
-        cl.CL_INVALID_EVENT: "CL_INVALID_EVENT",
-        cl.CL_INVALID_OPERATION: "CL_INVALID_OPERATION",
-        cl.CL_INVALID_GL_OBJECT: "CL_INVALID_GL_OBJECT",
-        cl.CL_INVALID_BUFFER_SIZE: "CL_INVALID_BUFFER_SIZE",
-        cl.CL_INVALID_MIP_LEVEL: "CL_INVALID_MIP_LEVEL",
-        cl.CL_INVALID_GLOBAL_WORK_SIZE: "CL_INVALID_GLOBAL_WORK_SIZE",
-        cl.CL_INVALID_PROPERTY: "CL_INVALID_PROPERTY",
-        cl.CL_INVALID_IMAGE_DESCRIPTOR: "CL_INVALID_IMAGE_DESCRIPTOR",
-        cl.CL_INVALID_COMPILER_OPTIONS: "CL_INVALID_COMPILER_OPTIONS",
-        cl.CL_INVALID_LINKER_OPTIONS: "CL_INVALID_LINKER_OPTIONS",
-        cl.CL_INVALID_DEVICE_PARTITION_COUNT: "CL_INVALID_DEVICE_PARTITION_COUNT",
-        cl.CL_INVALID_PIPE_SIZE: "CL_INVALID_PIPE_SIZE",
-        cl.CL_INVALID_DEVICE_QUEUE: "CL_INVALID_DEVICE_QUEUE",
-        cl.CL_INVALID_GL_CONTEXT_APPLE: "CL_INVALID_GL_CONTEXT_APPLE"
-    }
+    if sys.platform == 'darwin':
+        ERRORS[cl.CL_INVALID_GL_CONTEXT_APPLE] = "CL_INVALID_GL_CONTEXT_APPLE"
 
 
-    CHANNEL_ORDERS = {
-        cl.CL_R: "CL_R",
-        cl.CL_A: "CL_A",
-        cl.CL_RG: "CL_RG",
-        cl.CL_RA: "CL_RA",
-        cl.CL_RGB: "CL_RGB",
-        cl.CL_RGBA: "CL_RGBA",
-        cl.CL_BGRA: "CL_BGRA",
-        cl.CL_ARGB: "CL_ARGB",
-        cl.CL_INTENSITY: "CL_INTENSITY",
-        cl.CL_LUMINANCE: "CL_LUMINANCE",
-        cl.CL_Rx: "CL_Rx",
-        cl.CL_RGx: "CL_RGx",
-        cl.CL_RGBx: "CL_RGBx",
-        cl.CL_DEPTH: "CL_DEPTH",
-        cl.CL_DEPTH_STENCIL: "CL_DEPTH_STENCIL",
-        cl.CL_sRGB: "CL_sRGB",
-        cl.CL_sRGBx: "CL_sRGBx",
-        cl.CL_sRGBA: "CL_sRGBA",
-        cl.CL_sBGRA: "CL_sBGRA",
-        cl.CL_ABGR: "CL_ABGR",
-    }
+    CHANNEL_ORDERS = name_lookup_table(
+        "CL_R", "CL_A", "CL_RG", "CL_RA", "CL_RGB", "CL_RGBA", "CL_BGRA", "CL_ARGB",
+        "CL_INTENSITY", "CL_LUMINANCE", "CL_Rx", "CL_RGx", "CL_RGBx", "CL_DEPTH",
+        "CL_DEPTH_STENCIL", "CL_sRGB", "CL_sRGBx", "CL_sRGBA", "CL_sBGRA", "CL_ABGR" )
 
-    CHANNEL_TYPES = {
-        cl.CL_SNORM_INT8: "CL_SNORM_INT8",
-        cl.CL_SNORM_INT16: "CL_SNORM_INT16",
-        cl.CL_UNORM_INT8: "CL_UNORM_INT8",
-        cl.CL_UNORM_INT16: "CL_UNORM_INT16",
-        cl.CL_UNORM_SHORT_565: "CL_UNORM_SHORT_565",
-        cl.CL_UNORM_SHORT_555: "CL_UNORM_SHORT_555",
-        cl.CL_UNORM_INT_101010: "CL_UNORM_INT_101010",
-        cl.CL_SIGNED_INT8: "CL_SIGNED_INT8",
-        cl.CL_SIGNED_INT16: "CL_SIGNED_INT16",
-        cl.CL_SIGNED_INT32: "CL_SIGNED_INT32",
-        cl.CL_UNSIGNED_INT8: "CL_UNSIGNED_INT8",
-        cl.CL_UNSIGNED_INT16: "CL_UNSIGNED_INT16",
-        cl.CL_UNSIGNED_INT32: "CL_UNSIGNED_INT32",
-        cl.CL_HALF_FLOAT: "CL_HALF_FLOAT",
-        cl.CL_FLOAT: "CL_FLOAT",
-        cl.CL_UNORM_INT24: "CL_UNORM_INT24",
-        cl.CL_UNORM_INT_101010_2: "CL_UNORM_INT_101010_2",
-    }
+    CHANNEL_TYPES = name_lookup_table(
+        "CL_SNORM_INT8", "CL_SNORM_INT16", "CL_UNORM_INT8", "CL_UNORM_INT16",
+        "CL_UNORM_SHORT_565", "CL_UNORM_SHORT_555", "CL_UNORM_INT_101010",
+        "CL_SIGNED_INT8", "CL_SIGNED_INT16", "CL_SIGNED_INT32",
+        "CL_UNSIGNED_INT8", "CL_UNSIGNED_INT16", "CL_UNSIGNED_INT32",
+        "CL_HALF_FLOAT", "CL_FLOAT","CL_UNORM_INT24", "CL_UNORM_INT_101010_2" )
+
+    GL_OBJECT_TYPES = name_lookup_table(
+        "CL_GL_OBJECT_BUFFER", "CL_GL_OBJECT_TEXTURE2D",
+        "CL_GL_OBJECT_TEXTURE3D", "CL_GL_OBJECT_RENDERBUFFER",
+        "CL_GL_OBJECT_TEXTURE2D_ARRAY", "CL_GL_OBJECT_TEXTURE1D",
+        "CL_GL_OBJECT_TEXTURE1D_ARRAY", "CL_GL_OBJECT_TEXTURE_BUFFER" )
+
+    CL_OBJECT_TYPES = name_lookup_table(
+        "CL_MEM_OBJECT_BUFFER", "CL_MEM_OBJECT_IMAGE2D", "CL_MEM_OBJECT_IMAGE3D",
+        "CL_MEM_OBJECT_IMAGE2D_ARRAY", "CL_MEM_OBJECT_IMAGE1D", "CL_MEM_OBJECT_IMAGE1D_ARRAY",
+        "CL_MEM_OBJECT_IMAGE1D_BUFFER", "CL_MEM_OBJECT_PIPE" )
+
 
     def __init__(self):
         self._lib = cl.lib  # to hold the reference
@@ -1264,12 +1209,12 @@ class Buffer(CL, MemObject):
         """
         self = cls.__new__(cls)             # manually construct empty object
         self._init_empty(context, flags)
-        self._gl_buffer = bufferobj   # host_glbuffer?
+        self._gl_buffer = cl.ffi.cast('cl_GLuint', bufferobj)  # host_glbuffer?
 
         err = cl.ffi.new("cl_int *")
-
+        print self._gl_buffer
         self._handle = self._lib.clCreateFromGLBuffer(
-            context.handle, flags, bufferobj, err)
+            context.handle, flags, self._gl_buffer, err)
 
         self.check_error(err[0], 'clCreateFromGLBuffer')
         return self
@@ -2156,6 +2101,9 @@ class Context(CL):
         self = cls.__new__(cls)
         self._init_empty()
         err = cl.ffi.new("cl_int *")
+        # platforms = Platforms().platforms
+        # assert len(platforms) == 1, "don't know how to handle multiple platforms"
+        # cl_platform = platforms[0].handle
 
         if sys.platform == 'darwin':
             gl_context = cl.gllib.CGLGetCurrentContext()
@@ -2178,29 +2126,34 @@ class Context(CL):
             self.check_error(status, "clGetGLContextInfoAPPLE")
             assert size_ret[0] == sizeof_device_id, 'No devices found!'
         else:
-            raise NotImplementedError("GLX & WGL not yet implemented")
+            if sys.platform in ('win32', 'cygwin'):
+                gl_ctx_props = Context._properties_list(
+                    cl.CL_GL_CONTEXT_KHR,   self._lib.wglGetCurrentContext(),
+                    cl.CL_WGL_HDC_KHR,      self._lib.wglGetCurrentDC())
+                    # cl.CL_CONTEXT_PLATFORM, cl_platform ) FIXME: is this necessary?
+            else:
+                gl_ctx_props = Context._properties_list(
+                    cl.CL_GL_CONTEXT_KHR,   self._lib.glXGetCurrentContext(),
+                    cl.CL_GLX_DISPLAY_KHR,  self._lib.glXGetCurrentDisplay())
+#                    cl.CL_CONTEXT_PLATFORM, cl_platform )
 
-    #             clGetGLContextInfo = self._lib.clGetGLContextInfoKHR
-        #
-        #
-        #         gl_ctx_props = Context._properties_list(cl.CL_GL_CONTEXT_KHR, gl_context)
-        #         sizeof_device_id = cl.ffi.sizeof("cl_device_id")
-        #         gl_device_id = cl.ffi.new("cl_device_id *")
-        #         size_ret = cl.ffi.new("size_t *")
-        #
-        #         status = clGetGLContextInfo( gl_ctx_props,
-        #                 cl.CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR,
-        #                 sizeof_device_id, gl_device_id, size_ret)
-        #
-        #         self.check_error(status, "clGetGLContextInfo")
-        #         assert size_ret[0] == sizeof_device_id
-        #
-        #         print "GL context's device ID is:", gl_device_id
-        #         device_list = cl.ffi.new("cl_device_id*", gl_device_id)
-        #         n_devices = 1
+            sizeof_device_id = cl.ffi.sizeof("cl_device_id")
+            cl_device_id = cl.ffi.new("cl_device_id *")
+            size_ret = cl.ffi.new("size_t *")
+
+            status = self._lib.clGetGLContextInfoKHR( gl_ctx_props,
+                    cl.CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR,
+                    sizeof_device_id, cl_device_id, size_ret)
+
+            self.check_error(status, "clGetGLContextInfoKHR")
+            assert size_ret[0] == sizeof_device_id
+
+            self._handle = self._lib.clCreateContext(
+                gl_ctx_props, 1, cl_device_id, cl.ffi.NULL, cl.ffi.NULL, err)
+            self.check_error(err[0], "clCreateContext")
 
 
-#        print "GL context's device ID is:", cl_device_id[0]
+        print "GL context's device ID is:", cl_device_id[0]
 
         self._devices = [Device(cl_device_id[0])]
         self._platform = self._devices[0].platform
