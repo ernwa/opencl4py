@@ -2105,8 +2105,8 @@ class Context(CL):
         platform_props = (cl.CL_CONTEXT_PLATFORM, cl_platform) if cl_platform else ()
 
         if sys.platform == 'darwin':
-            gl_context = cl.gllib.CGLGetCurrentContext()
-            gl_sharegroup = cl.gllib.CGLGetShareGroup( gl_context )
+            gl_context = self._gllib.CGLGetCurrentContext()
+            gl_sharegroup = self._gllib.CGLGetShareGroup( gl_context )
             plist = Context._properties_list(
                 cl.CL_CONTEXT_PROPERTY_USE_CGL_SHAREGROUP_APPLE, gl_sharegroup,
                 *platform_props )
@@ -2128,12 +2128,12 @@ class Context(CL):
         else:
             if sys.platform in ('win32', 'cygwin'):
                 gl_ctx_props = Context._properties_list(
-                    cl.CL_GL_CONTEXT_KHR,   self._lib.wglGetCurrentContext(),
-                    cl.CL_WGL_HDC_KHR,      self._lib.wglGetCurrentDC(),
+                    cl.CL_GL_CONTEXT_KHR,   self._gllib.wglGetCurrentContext(),
+                    cl.CL_WGL_HDC_KHR,      self._gllib.wglGetCurrentDC(),
                     *platform_props )
             else:
                 gl_ctx_props = Context._properties_list(
-                    cl.CL_GL_CONTEXT_KHR,   self._lib.glXGetCurrentContext(),
+                    cl.CL_GL_CONTEXT_KHR,   self._gllib.glXGetCurrentContext(),
                     cl.CL_GLX_DISPLAY_KHR,  self._lib.glXGetCurrentDisplay(),
                     *platform_props )
 
