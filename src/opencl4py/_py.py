@@ -1205,14 +1205,13 @@ class Buffer(CL, MemObject):
                         image object can be created. The renderbuffer format and
                         dimensions will be used to create the 2D image object.
         Returns:
-            Image object.
+            Buffer object.
         """
         self = cls.__new__(cls)             # manually construct empty object
         self._init_empty(context, flags)
         self._gl_buffer = cl.ffi.cast('cl_GLuint', bufferobj)  # host_glbuffer?
 
         err = cl.ffi.new("cl_int *")
-        print self._gl_buffer
         self._handle = self._lib.clCreateFromGLBuffer(
             context.handle, flags, self._gl_buffer, err)
 
@@ -2097,19 +2096,20 @@ class Context(CL):
         self._n_refs = 1
 
     @classmethod
-    def from_current_gl_context(cls):
+    def from_current_gl_context(cls, platform=None):       #TODO: add multi-device support
         self = cls.__new__(cls)
         self._init_empty()
         err = cl.ffi.new("cl_int *")
-        # platforms = Platforms().platforms
-        # assert len(platforms) == 1, "don't know how to handle multiple platforms"
-        # cl_platform = platforms[0].handle
+
+        cl_platform = platform.handle if isinstance(platform, Platform) else platform
+        platform_props = (cl.CL_CONTEXT_PLATFORM, cl_platform) if cl_platform else ()
 
         if sys.platform == 'darwin':
             gl_context = cl.gllib.CGLGetCurrentContext()
             gl_sharegroup = cl.gllib.CGLGetShareGroup( gl_context )
             plist = Context._properties_list(
-                cl.CL_CONTEXT_PROPERTY_USE_CGL_SHAREGROUP_APPLE, gl_sharegroup )
+                cl.CL_CONTEXT_PROPERTY_USE_CGL_SHAREGROUP_APPLE, gl_sharegroup,
+                *platform_props )
 
             self._handle = self._lib.clCreateContext(
                 plist, 0, cl.ffi.NULL, cl.ffi.NULL, cl.ffi.NULL, err)
@@ -2129,13 +2129,13 @@ class Context(CL):
             if sys.platform in ('win32', 'cygwin'):
                 gl_ctx_props = Context._properties_list(
                     cl.CL_GL_CONTEXT_KHR,   self._lib.wglGetCurrentContext(),
-                    cl.CL_WGL_HDC_KHR,      self._lib.wglGetCurrentDC())
-                    # cl.CL_CONTEXT_PLATFORM, cl_platform ) FIXME: is this necessary?
+                    cl.CL_WGL_HDC_KHR,      self._lib.wglGetCurrentDC(),
+                    *platform_props )
             else:
                 gl_ctx_props = Context._properties_list(
                     cl.CL_GL_CONTEXT_KHR,   self._lib.glXGetCurrentContext(),
-                    cl.CL_GLX_DISPLAY_KHR,  self._lib.glXGetCurrentDisplay())
-#                    cl.CL_CONTEXT_PLATFORM, cl_platform )
+                    cl.CL_GLX_DISPLAY_KHR,  self._lib.glXGetCurrentDisplay(),
+                    *platform_props )
 
             sizeof_device_id = cl.ffi.sizeof("cl_device_id")
             cl_device_id = cl.ffi.new("cl_device_id *")
@@ -2153,21 +2153,19 @@ class Context(CL):
             self.check_error(err[0], "clCreateContext")
 
 
-        print "GL context's device ID is:", cl_device_id[0]
+#        print "GL context's device ID is:", cl_device_id[0]
 
         self._devices = [Device(cl_device_id[0])]
         self._platform = self._devices[0].platform
         return self
 
 
-    def __init__(self, platform, devices=[]):
+    def __init__(self, platform, devices=[], properties=[]):
         self._init_empty()
         self._platform = platform
         self._devices = devices
 
-        plist = [cl.CL_CONTEXT_PLATFORM, platform.handle]
-        # if gl_context:
-        #     plist += [gl_context_type, gl_context]
+        plist = [cl.CL_CONTEXT_PLATFORM, platform.handle] + properties
 
         n_devices = len(devices)
         device_list = cl.ffi.new("cl_device_id[]", len(devices))
@@ -2215,7 +2213,6 @@ class Context(CL):
         return fmts
 
 
-
     def create_queue(self, device, flags=0, properties=None):
         """Creates Queue object for the supplied device.
 
@@ -2230,6 +2227,7 @@ class Context(CL):
         """
         return Queue(self, device, flags, properties)
 
+
     def create_buffer(self, flags, host_array=None, size=None):
         """Creates Buffer object based on host_array.
 
@@ -2241,6 +2239,22 @@ class Context(CL):
             Buffer object.
         """
         return Buffer(self, flags, host_array, size)
+
+
+    def create_buffer_from_gl_buffer(self, flags, bufferobj):
+        """Creates a Buffer from an OpenGL buffer object.
+
+        Parameters:
+            flags: memory access descriptor flags
+            renderbuffer: The name of a GL renderbuffer object.
+                        The renderbuffer storage must be specified before the
+                        image object can be created. The renderbuffer format and
+                        dimensions will be used to create the 2D image object.
+        Returns:
+            Buffer object.
+        """
+        return Buffer.from_gl_buffer(self, flags, bufferobj)
+
 
     def create_image(self, flags, image_format, image_desc, host_array=None):
         """Creates Image object based on host_array.
@@ -2258,7 +2272,8 @@ class Context(CL):
         """
         return Image(self, flags, image_format, image_desc, host_array)
 
-    def create_from_gl_renderbuffer(self, flags, renderbuffer):
+
+    def create_image_from_gl_renderbuffer(self, flags, renderbuffer):
         """Creates an OpenCL 2D image object from an OpenGL renderbuffer object.
 
         Parameters:
@@ -2272,6 +2287,23 @@ class Context(CL):
         """
 
         return Image.from_gl_renderbuffer(self, flags, renderbuffer)
+
+
+    def create_image_from_gl_texture(self, context, flags, texture_target, miplevel, texture):
+        """Creates a 2D Image from an OpenGL texture object.
+
+        Parameters:
+            flags: memory access descriptor flags.
+            texture_target: image type of texture.
+            miplevel: mipmap level to be used. Usually 0.
+            texture: The name of a GL texture object.
+                        Can be 1D, 2D, 3D, 1D array, 2D array, cubemap, rectangle
+                        or buffer texture object. Must be a complete texture.
+        Returns:
+            Image object.
+        """
+
+        return Image.from_gl_texture(self, flags, texture_target, miplevel, texture)
 
 
     def create_program(self, src, include_dirs=(), options="", devices=None,
@@ -2291,6 +2323,7 @@ class Context(CL):
         return Program(self, self.devices if devices is None else devices,
                        src, include_dirs, options, binary)
 
+
     def create_pipe(self, flags, packet_size, max_packets):
         """Creates OpenCL 2.0 pipe.
 
@@ -2307,6 +2340,7 @@ class Context(CL):
         """
         return Pipe(self, flags, packet_size, max_packets)
 
+
     def svm_alloc(self, flags, size, alignment=0):
         """Allocates shared virtual memory (SVM) buffer.
 
@@ -2322,6 +2356,7 @@ class Context(CL):
                        0 defaults to the largest supported alignment.
         """
         return SVM(self, flags, size, alignment)
+
 
     def _release(self):
         if self.handle is not None:
