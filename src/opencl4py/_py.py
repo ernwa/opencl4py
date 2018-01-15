@@ -2134,7 +2134,7 @@ class Context(CL):
             else:
                 gl_ctx_props = Context._properties_list(
                     cl.CL_GL_CONTEXT_KHR,   self._gllib.glXGetCurrentContext(),
-                    cl.CL_GLX_DISPLAY_KHR,  self._lib.glXGetCurrentDisplay(),
+                    cl.CL_GLX_DISPLAY_KHR,  self._gllib.glXGetCurrentDisplay(),
                     *platform_props )
 
             sizeof_device_id = cl.ffi.sizeof("cl_device_id")
