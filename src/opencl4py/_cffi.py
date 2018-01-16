@@ -683,7 +683,7 @@ cl_int clGetGLContextInfoKHR(
                     void *                  param_value,
                     size_t *                param_value_size_ret);
 
-cl_int (*clGetGLContextInfoKHR_fn)(
+typedef cl_int (*clGetGLContextInfoKHR_fn)(
         cl_context_properties *, cl_gl_context_info, size_t, void *, size_t *);
 
 """
