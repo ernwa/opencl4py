@@ -630,9 +630,6 @@ cl_int clEnqueueReleaseGLObjects(
                     const cl_event *      event_wait_list,
                     cl_event *            event);
 
-void * clGetExtensionFunctionAddressForPlatform(
-                    cl_platform_id *      platform,
-                    const char *          func_name );
 
 /* Deprecated OpenCL 1.1 APIs */
 cl_mem clCreateFromGLTexture2D(cl_context      context,
