@@ -2101,7 +2101,12 @@ class Context(CL):
         self._init_empty()
         err = cl.ffi.new("cl_int *")
 
-        cl_platform = platform.handle if isinstance(platform, Platform) else platform
+        if isinstance(platform, Platform):
+            cl_platform = platform.handle
+        else:
+            cl_platform = platform
+            platform = Platform(cl_platform)
+
         platform_props = (cl.CL_CONTEXT_PLATFORM, cl_platform) if cl_platform else ()
 
         if sys.platform == 'darwin':
@@ -2137,11 +2142,14 @@ class Context(CL):
                     cl.CL_GLX_DISPLAY_KHR,  self._gllib.glXGetCurrentDisplay(),
                     *platform_props )
 
+            fn_ptr = platform.get_extension_function_address( "clGetGLContextInfoKHR" )
+            clGetGLContextInfoKHR = cl.ffi.cast('clGetGLContextInfoKHR_fn', fn_ptr)
+
             sizeof_device_id = cl.ffi.sizeof("cl_device_id")
             cl_device_id = cl.ffi.new("cl_device_id *")
             size_ret = cl.ffi.new("size_t *")
 
-            status = self._lib.clGetGLContextInfoKHR( gl_ctx_props,
+            status = clGetGLContextInfoKHR( gl_ctx_props,
                     cl.CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR,
                     sizeof_device_id, cl_device_id, size_ret)
 
@@ -2829,6 +2837,9 @@ class Platform(CL):
                 cl.CL_PLATFORM_EXTENSIONS).split(' ')
                 if ext.strip()]
         return self._extensions
+
+    def get_extension_function_address(fn_name):
+        return self._lib.clGetExtensionFunctionAddressForPlatform(self.handle, fn_name)
 
     def __iter__(self):
         return iter(self.devices)

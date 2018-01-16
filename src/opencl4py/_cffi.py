@@ -574,13 +574,6 @@ cl_int clEnqueueCopyBufferToImage(
     typedef cl_uint     cl_gl_context_info;
 
 
-cl_int clGetGLContextInfoKHR(
-                    cl_context_properties * properties,
-                    cl_gl_context_info      param_name,
-                    size_t                  param_value_size,
-                    void *                  param_value,
-                    size_t *                param_value_size_ret);
-
 cl_int	clGetGLContextInfoAPPLE(
                     cl_context             context,
 					void *                 platform_gl_ctx,
@@ -678,6 +671,23 @@ void * wglGetCurrentContext(void);
 void * glXGetCurrentContext( void );
 void * glXGetCurrentDisplay( void );
 
+
+void * clGetExtensionFunctionAddressForPlatform(
+    cl_platform_id platform,
+ 	const char *funcname );
+
+
+// extension functions and function pointers
+
+cl_int clGetGLContextInfoKHR(
+                    cl_context_properties * properties,
+                    cl_gl_context_info      param_name,
+                    size_t                  param_value_size,
+                    void *                  param_value,
+                    size_t *                param_value_size_ret);
+
+cl_int (*clGetGLContextInfoKHR_fn)(
+        cl_context_properties *, cl_gl_context_info, size_t, void *, size_t *);
 
 """
 
