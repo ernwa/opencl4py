@@ -2838,7 +2838,7 @@ class Platform(CL):
                 if ext.strip()]
         return self._extensions
 
-    def get_extension_function_address(fn_name):
+    def get_extension_function_address(self, fn_name):
         return self._lib.clGetExtensionFunctionAddressForPlatform(self.handle, fn_name)
 
     def __iter__(self):
