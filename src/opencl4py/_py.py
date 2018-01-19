@@ -40,6 +40,7 @@ import opencl4py._cffi as cl
 import sys
 
 def ensure_type(typespec, obj, cast=False):
+#    print cl.ffi
     if not isinstance(obj, cl.ffi.CData):  # cffi object
         return cl.ffi.new(typespec, obj)
     if cast:
@@ -1345,7 +1346,9 @@ class Image(CL, MemObject):
         self._host_array = (host_array if flags & cl.CL_MEM_USE_HOST_PTR != 0 else None)
         host_ptr = CL.extract_ptr(host_array)
 
+#        print cl.ffi
         self.image_format = ensure_type("cl_image_format *", image_format)
+#        self.image_format = cl.ffi.new("cl_image_format*", image_format)
         self.image_desc = ensure_type("cl_image_desc *", image_desc)   # will the cast of buffer/mem_object work?
         err = cl.ffi.new("cl_int *")
         self._handle = self._lib.clCreateImage(
@@ -2171,6 +2174,8 @@ class Context(CL):
     def __init__(self, platform, devices=[], properties=[]):
         self._init_empty()
         self._platform = platform
+        devices = [ dev if not isinstance(dev, int) else
+                          platform.devices[dev] for dev in devices]
         self._devices = devices
 
         plist = [cl.CL_CONTEXT_PLATFORM, platform.handle] + properties
@@ -2297,7 +2302,7 @@ class Context(CL):
         return Image.from_gl_renderbuffer(self, flags, renderbuffer)
 
 
-    def create_image_from_gl_texture(self, context, flags, texture_target, miplevel, texture):
+    def create_image_from_gl_texture(self, flags, texture_target, miplevel, texture):
         """Creates a 2D Image from an OpenGL texture object.
 
         Parameters:
