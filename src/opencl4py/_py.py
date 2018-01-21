@@ -1,3 +1,4 @@
+from __future__ import print_function
 """
 Copyright (c) 2014, Samsung Electronics Co.,Ltd.
 All rights reserved.
@@ -368,8 +369,8 @@ class Queue(CL):
         return Event(event[0]) if event != cl.ffi.NULL else None
 
 
-    def map_image(self, image, flags, region,
-                   blocking=True, origin=(0,0),
+    def map_image(self, image, flags, region=None,
+                   blocking=True, origin=None,
                    wait_for=None, need_event=False):
         """Maps image.
 
@@ -390,11 +391,17 @@ class Queue(CL):
                     image_row_pitch - scan-line pitch in bytes.
                     image_slice_pitch - size in bytes of each 2D slice.
         """
-        assert len(origin) == len(region)
-        if len(origin) == 2:
-            origin = tuple(origin) + (0,)
+        if region is None:
+            region = (image.width or 1, image.height or 1, image.depth or 1)
+        elif len(region) == 2:
             region = tuple(region) + (1,)
 
+        if origin is None:
+            origin = (0, 0, 0)
+        elif len(origin) == 2:
+            origin = tuple(origin) + (0,)
+
+        assert len(origin) == len(region)
         origin_struct = cl.ffi.new("size_t[3]", origin)
         region_struct = cl.ffi.new("size_t[3]", region)
 

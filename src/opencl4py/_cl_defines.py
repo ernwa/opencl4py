@@ -1,3 +1,4 @@
+from __future__ import print_function
 #  OpencCL 2.2 constants, converted from cl.h
 # Error Codes
 CL_SUCCESS =                                  0

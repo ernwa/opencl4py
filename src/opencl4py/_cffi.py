@@ -1,3 +1,4 @@
+from __future__ import print_function
 """
 Copyright (c) 2014, Samsung Electronics Co.,Ltd.
 All rights reserved.
@@ -693,6 +694,8 @@ def initialize(
         gl_backends=("libGL.so", "OpenGL32.dll", "OpenGL")):    # FIXME: add WGL & GLX
     global lib, ffi, gllib, lock
     with lock:
+        if ffi:
+            print( '<opencl4py> reinitializing ffi. Things may not work right.' )
         ffi = cffi.FFI()
         ffi.cdef(clsrc)
 

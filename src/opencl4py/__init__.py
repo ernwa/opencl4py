@@ -1,3 +1,4 @@
+from __future__ import print_function
 """
 Copyright (c) 2014, Samsung Electronics Co.,Ltd.
 All rights reserved.
@@ -36,7 +37,6 @@ Original author: Alexey Kazantsev <a.kazantsev@samsung.com>
 """
 Init module.
 """
-
 from opencl4py import _cffi
 from opencl4py._py import CL, Platforms, Context, Buffer, Image, CLRuntimeError, skip, ensure_type
 from opencl4py._cl_defines import *     # no point in repeating them all
@@ -54,7 +54,7 @@ def eq_addr(a, b):
     return a.__array_interface__["data"][0] == b.__array_interface__["data"][0]
 
 
-def realign_array(a, align, np):
+def realign_array(a, align, np):    # there are better ways to do this
     """Returns aligned copy of the numpy array with continuous memory layout.
     (useful for CL_MEM_USE_HOST_PTR buffers).
 
