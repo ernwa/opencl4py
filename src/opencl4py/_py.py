@@ -39,6 +39,7 @@ Helper classes for OpenCL cffi bindings.
 """
 import opencl4py._cffi as cl
 import sys
+import numpy as np
 
 def ensure_type(typespec, obj, cast=False):
 #    print cl.ffi
