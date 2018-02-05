@@ -39,7 +39,7 @@ Init module.
 """
 from opencl4py import _cffi
 from opencl4py._py import CL, Platforms, Context, Buffer, Image, CLRuntimeError, skip, ensure_type
-from opencl4py._cl_defines import *     # no point in repeating them all
+from opencl4py._cl_defines import *     # all the #defines
 
 
 def get_ffi():

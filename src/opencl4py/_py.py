@@ -50,11 +50,28 @@ def ensure_type(typespec, obj, cast=False):
     return obj
 
 
+def typeof_function(ffi, name):   # without function needing to be in lib
+    return ffi._parser._declarations['function ' + name][0]
+
+
 def lookup_const(name):
     return cl.__dict__[name]
 
+
 def name_lookup_table(*names):
     return { cl.__dict__[name]: name for name in names }
+
+
+def register_extension(name, c_prototypes):
+    cl.extensions[name] = c_prototypes
+    cl.cdef(c_prototypes)
+
+def check_error(err, funcname):
+    if err:
+        raise CLRuntimeError(
+            "%s() failed with error %s" %
+            ( funcname, CL.get_error_description(err)), err )
+
 
 class CLRuntimeError(RuntimeError):
     def __init__(self, msg, code):
@@ -127,6 +144,7 @@ class CL(object):
         self._lib = cl.lib  # to hold the reference
         self._gllib = cl.gllib
         self._handle = None
+        self.from_gl = False
 
     def check_error(self, err, funcname):
         if err:
@@ -213,6 +231,18 @@ class Event(CL):
     def __init__(self, handle):
         super(Event, self).__init__()
         self._handle = handle
+
+    @classmethod
+    def from_gl_sync(cls, context, sync ):
+        """Creates an event object linked to an OpenGL sync object.
+
+        Parameters:
+            context: A Context created from an OpenGL context or share group.
+            sync: The name of a sync object in the associated GL share group.
+        Returns:
+            Event object.
+        """
+        return context.create_event_from_gl_sync( sync )
 
     @staticmethod
     def wait_multi(wait_for, lib=cl.lib):
@@ -324,7 +354,7 @@ class Queue(CL):
         """
         return self._device
 
-    def execute_kernel(self, kernel, global_size, local_size,
+    def execute_kernel(self, kernel, global_size, local_size=None,
                        global_offset=None, wait_for=None, need_event=False):
         """Executes OpenCL kernel (calls clEnqueueNDRangeKernel).
 
@@ -2108,6 +2138,19 @@ class Context(CL):
 
     @classmethod
     def from_current_gl_context(cls, platform=None):       #TODO: add multi-device support
+        if platform is None:
+            for platform in Platforms.get_ids():
+                try:
+                    return Context.from_current_gl_context(platform)
+                except CLRuntimeError as error:
+                    errmsg, errcode = error.args
+                    print(platform, errcode, errmsg)
+                    if errcode != cl.CL_INVALID_GL_SHAREGROUP_REFERENCE_KHR:
+                        raise
+            else:
+                raise CLRuntimeError( "Could not find CL platform corresponding to current GL context" )
+
+
         self = cls.__new__(cls)
         self._init_empty()
         err = cl.ffi.new("cl_int *")
@@ -2153,8 +2196,8 @@ class Context(CL):
                     cl.CL_GLX_DISPLAY_KHR,  self._gllib.glXGetCurrentDisplay(),
                     *platform_props )
 
-            fn_ptr = platform.get_extension_function_address( "clGetGLContextInfoKHR" )
-            clGetGLContextInfoKHR = cl.ffi.cast('clGetGLContextInfoKHR_fn', fn_ptr)
+            clGetGLContextInfoKHR = platform.get_extension_function("clGetGLContextInfoKHR")
+
 
             sizeof_device_id = cl.ffi.sizeof("cl_device_id")
             cl_device_id = cl.ffi.new("cl_device_id *")
@@ -2233,6 +2276,30 @@ class Context(CL):
         self.check_error(status, "clGetSupportedImageFormats")
         return fmts
 
+    def create_event_from_gl_sync( self, sync ):
+        """Creates an event object linked to an OpenGL sync object.
+
+        Parameters:
+            context: A Context created from an OpenGL context or share group.
+            sync: The name of a sync object in the associated GL share group.
+        Returns:
+            Event object.
+        """
+
+        try:    # make it fast. If you're using this function you want fast
+            clCreateEventFromGLsyncKHR = self._create_event_from_gl_sync
+        except AttributeError:
+            clCreateEventFromGLsyncKHR = self.platform.get_extension_function('clCreateEventFromGLsyncKHR')
+            self._create_event_from_gl_sync = clCreateEventFromGLsyncKHR
+
+        errcode_ret = cl.ffi.new('cl_int*')
+        hevent = clCreateEventFromGLsyncKHR(self._handle, sync, errcode_ret )
+        self.check_error(errcode_ret[0], 'clCreateEventFromGLsyncKHR')
+
+        event = Event(self, hevent)
+        event._host_sync = sync              # host_glbuffer?
+        event.from_gl = True
+        return event
 
     def create_queue(self, device, flags=0, properties=None):
         """Creates Queue object for the supplied device.
@@ -2438,6 +2505,14 @@ class Device(CL):
         return self._get_device_info_int(cl.CL_DEVICE_TYPE)
 
     @property
+    def is_cpu(self):
+        return self.type == cl.CL_DEVICE_TYPE_CPU
+
+    @property
+    def is_gpu(self):
+        return self.type == cl.CL_DEVICE_TYPE_GPU
+
+    @property
     def name(self):
         """
         OpenCL name of the device.
@@ -2508,7 +2583,7 @@ class Device(CL):
     @property
     def supports_error_correction(self):
         return self._get_device_info_bool(
-            cl.CL_DEVICE_ERROR_CORRECTION_SUPPORT)
+            cl.CL_DEVICE_ERROR_CORRECTION_SUPPORT )
 
     @property
     def host_unified_memory(self):
@@ -2796,6 +2871,8 @@ class Platform(CL):
         self._name = None
         self._devices = None
         self._extensions = None
+        self._extension_functions = {}
+
 
 
     def _get_platform_info_str(self, name):
@@ -2854,6 +2931,16 @@ class Platform(CL):
     def get_extension_function_address(self, fn_name):
         return self._lib.clGetExtensionFunctionAddressForPlatform(self.handle, fn_name)
 
+    def get_extension_function(self, fn_name):
+        try:
+            return self._extension_functions[fn_name]
+        except KeyError:
+            fn_addr = self.get_extension_function_address( fn_name )
+            fn_type = typeof_function( cl.ffi, fn_name )
+            fn = cl.ffi.cast(fn_type, fn_addr)
+            self._extension_functions[fn_name] = fn
+            return fn
+
     def __iter__(self):
         return iter(self.devices)
 
@@ -2882,14 +2969,7 @@ class Platforms(CL):
     def __init__(self):
         cl.initialize()
         super(Platforms, self).__init__()
-        nn = cl.ffi.new("cl_uint[]", 1)
-        n = self._lib.clGetPlatformIDs(0, cl.ffi.NULL, nn)
-        self.check_error(n, 'clGetPlatformIDs')
-
-        ids = cl.ffi.new("cl_platform_id[]", nn[0])
-        n = self._lib.clGetPlatformIDs(nn[0], ids, nn)
-        self.check_error(n, 'clGetPlatformIDs')
-
+        ids = Platforms.get_ids()
         self._platforms = list(Platform(p_id, str(p_num))
                                for p_num, p_id in enumerate(ids))
 
@@ -2899,6 +2979,17 @@ class Platforms(CL):
 
     def __iter__(self):
         return iter(self.platforms)
+
+    @staticmethod
+    def get_ids():
+        nn = cl.ffi.new("cl_uint[]", 1)
+        n = cl.lib.clGetPlatformIDs(0, cl.ffi.NULL, nn)
+        check_error(n, 'clGetPlatformIDs')
+
+        ids = cl.ffi.new("cl_platform_id[]", nn[0])
+        n = cl.lib.clGetPlatformIDs(nn[0], ids, nn)
+        check_error(n, 'clGetPlatformIDs')
+        return ids
 
     def dump_devices(self):
         """Returns string with information about OpenCL platforms and devices.

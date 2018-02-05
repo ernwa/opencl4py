@@ -677,22 +677,60 @@ void * clGetExtensionFunctionAddressForPlatform(
 
 // extension functions and function pointers
 
-cl_int clGetGLContextInfoKHR(
-                    cl_context_properties * properties,
-                    cl_gl_context_info      param_name,
-                    size_t                  param_value_size,
-                    void *                  param_value,
-                    size_t *                param_value_size_ret);
 
-typedef cl_int (*clGetGLContextInfoKHR_fn)(
-        cl_context_properties *, cl_gl_context_info, size_t, void *, size_t *);
+// typedef cl_int (*clGetGLContextInfoKHR_fn)(
+//         cl_context_properties *, cl_gl_context_info, size_t, void *, size_t *);
 
 """
 
+extensions = {
+    'cl_khr_gl_sharing': """
+            cl_int  clGetGLContextInfoKHR(
+                        cl_context_properties *     properties,
+                        cl_gl_context_info          param_name,
+                        size_t                      param_value_size,
+                        void *                      param_value,
+                        size_t *                    param_value_size_ret);""",
+
+    'cl_khr_icd':        """
+            cl_int  clIcdGetPlatformIDsKHR(
+                        cl_uint                     num_entries,
+                        cl_platform_id *            platforms,
+                        cl_uint *                   num_platforms);""",
+
+    'cl_ext_migrate_memobject': """
+            typedef     cl_bitfield                 cl_mem_migration_flags_ext;
+            cl_int  clEnqueueMigrateMemObjectEXT(
+                        cl_command_queue            command_queue,
+                        cl_uint                     num_mem_objects,
+                        const cl_mem *              mem_objects,
+                        cl_mem_migration_flags_ext flags,
+                        cl_uint                     num_events_in_wait_list,
+                        const cl_event *            event_wait_list,
+                        cl_event *                  event);""",
+
+    'cl_ext_device_fission': """
+            typedef     cl_bitfield                 cl_device_partition_property_ext;
+            cl_int  clReleaseDeviceEXT( cl_device_id device );
+
+            cl_int  clRetainDeviceEXT( cl_device_id  device );
+
+            cl_int  clCreateSubDevicesEXT(
+                        cl_device_id                in_device,
+                        const cl_device_partition_property_ext * properties,
+                        cl_uint                     num_entries,
+                        cl_device_id *              out_devices,
+                        cl_uint *                   num_devices );""",
+
+}
+
+
 def initialize(
         backends=("libOpenCL.so", "OpenCL.dll", "OpenCL"),
-        gl_backends=("libGL.so", "OpenGL32.dll", "OpenGL")):    # FIXME: add WGL & GLX
-    global lib, ffi, gllib, lock
+        gl_backends=("libGL.so", "OpenGL32.dll", "OpenGL")):    # FIXME: add EGL
+
+    global lib, ffi, gllib, extensions, lock
+
     with lock:
         if ffi:
             print( '<opencl4py> reinitializing ffi. Things may not work right.' )
@@ -716,3 +754,5 @@ def initialize(
                     break
                 except OSError:
                     pass
+
+        ffi.cdef('\n'.join(extensions.values()))    # register the known extensions
