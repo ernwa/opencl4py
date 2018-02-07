@@ -41,6 +41,18 @@ import opencl4py._cffi as cl
 import sys
 import numpy as np
 
+
+CL_TYPE_FROM_DTYPE = {
+                           np.float16: 'half',    np.float32: 'float',
+	np.int8:    'char',    np.int16:   'short',   np.int32:   'int',
+	np.uint8:   'uchar',   np.uint16:  'ushort',  np.uint32:  'uint'
+}
+
+
+def dtype_cl_type_name(dtype):
+    return CL_TYPE_FROM_DTYPE[ np.dtype(dtype).type ]
+
+
 def ensure_type(typespec, obj, cast=False):
 #    print cl.ffi
     if not isinstance(obj, cl.ffi.CData):  # cffi object
@@ -72,6 +84,25 @@ def check_error(err, funcname):
             "%s() failed with error %s" %
             ( funcname, CL.get_error_description(err)), err )
 
+def get_wait_list( wait_for ):
+    """Returns cffi event list and number of events
+    from list of Event objects, returns (None, 0) if wait_for is None.
+    """
+    if wait_for:
+        n_events = len(wait_for)
+        wait_list = cl.ffi.new("cl_event[]", [ev.handle for ev in wait_for] )
+    else:
+        n_events = 0
+        wait_list = cl.ffi.NULL
+    return (wait_list, n_events)
+
+def wait_for_events( events, lib=None ):
+    """Wait on list of Event objects.
+    """
+    lib = lib or cl.lib
+    wait_list, n_events = get_wait_list(events)
+    n = lib.clWaitForEvents(n_events, wait_list)
+    check_error(n, 'clWaitForEvents')
 
 class CLRuntimeError(RuntimeError):
     def __init__(self, msg, code):
@@ -139,7 +170,6 @@ class CL(object):
         "CL_MEM_OBJECT_IMAGE2D_ARRAY", "CL_MEM_OBJECT_IMAGE1D", "CL_MEM_OBJECT_IMAGE1D_ARRAY",
         "CL_MEM_OBJECT_IMAGE1D_BUFFER", "CL_MEM_OBJECT_PIPE" )
 
-
     def __init__(self):
         self._lib = cl.lib  # to hold the reference
         self._gllib = cl.gllib
@@ -189,18 +219,7 @@ class CL(object):
 
     @staticmethod
     def get_wait_list(wait_for):
-        """Returns cffi event list and number of events
-        from list of Event objects, returns (None, 0) if wait_for is None.
-        """
-        if wait_for is not None:
-            n_events = len(wait_for)
-            wait_list = cl.ffi.new("cl_event[]", n_events)
-            for i, ev in enumerate(wait_for):
-                wait_list[i] = ev.handle
-        else:
-            n_events = 0
-            wait_list = cl.ffi.NULL
-        return (wait_list, n_events)
+        return get_wait_list(wait_for)
 
     @staticmethod
     def get_error_name_from_code(code):
@@ -245,12 +264,8 @@ class Event(CL):
         return context.create_event_from_gl_sync( sync )
 
     @staticmethod
-    def wait_multi(wait_for, lib=cl.lib):
-        """Wait on list of Event objects.
-        """
-        wait_list, n_events = CL.get_wait_list(wait_for)
-        n = lib.clWaitForEvents(n_events, wait_list)
-        CL.check_error(None, n, 'clWaitForEvents')
+    def wait_multi(wait_for, lib=None):
+        wait_for_events( wait_for, lib=lib )
 
     def wait(self):
         """Waits on this event.
@@ -371,31 +386,30 @@ class Queue(CL):
         """
         event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
+
         n_dims = len(global_size)
-        global_work_size = cl.ffi.new("size_t[]", n_dims)
-        for i, sz in enumerate(global_size):
-            global_work_size[i] = sz
+        global_work_size = cl.ffi.new("size_t[]", list(global_size))
+
         if local_size is None:
             local_work_size = cl.ffi.NULL
         else:
             if len(local_size) != n_dims:
                 raise ValueError("local_size should be the same length "
                                  "as global_size")
-            local_work_size = cl.ffi.new("size_t[]", n_dims)
-            for i, sz in enumerate(local_size):
-                local_work_size[i] = sz
+            local_work_size = cl.ffi.new("size_t[]", list(local_size))
+
         if global_offset is None:
             global_work_offset = cl.ffi.NULL
         else:
             if len(global_work_offset) != n_dims:
                 raise ValueError("global_offset should be the same length "
                                  "as global_size")
-            global_work_offset = cl.ffi.new("size_t[]", n_dims)
-            for i, sz in enumerate(global_offset):
-                global_work_offset[i] = sz
+            global_work_offset = cl.ffi.new("size_t[]", list(global_offset))
+
         n = self._lib.clEnqueueNDRangeKernel(
             self.handle, kernel.handle, n_dims, global_work_offset,
             global_work_size, local_work_size, n_events, wait_list, event)
+
         self.check_error(n, "clEnqueueNDRangeKernel")
         return Event(event[0]) if event != cl.ffi.NULL else None
 
@@ -1370,6 +1384,73 @@ class Image(CL, MemObject):
                  (weakrefs do not help here).
     """
 
+    IMGRW_SUFFIX_MAP = {
+		cl.CL_SNORM_INT8: 'f', cl.CL_SNORM_INT16: 'f', cl.CL_UNORM_INT8: 'f', cl.CL_UNORM_INT16: 'f',
+		cl.CL_UNORM_INT24:'f', cl.CL_UNORM_SHORT_565: 'f', cl.CL_UNORM_SHORT_555: 'f',
+		cl.CL_UNORM_INT_101010:'f', cl.CL_UNORM_INT_101010_2: 'f', cl.CL_FLOAT: 'f',
+		cl.CL_SIGNED_INT8: 'i', cl.CL_SIGNED_INT16: 'i', cl.CL_SIGNED_INT32: 'i',
+		cl.CL_UNSIGNED_INT8: 'ui', cl.CL_UNSIGNED_INT16: 'ui', cl.CL_UNSIGNED_INT32: 'ui',
+        cl.CL_HALF_FLOAT: 'h'
+	}
+
+    FORMAT_DTYPE_MAP = {
+		cl.CL_UNORM_SHORT_565:  '>u2',  cl.CL_UNORM_SHORT_555:    '>u2',
+		cl.CL_UNORM_INT_101010: '>u4',  cl.CL_UNORM_INT_101010_2: '>u4',         # TODO: are packed formats big-endian?
+		cl.CL_SNORM_INT8:        'i2',  cl.CL_SNORM_INT16:         'i2',
+        cl.CL_UNORM_INT8:        'i1',  cl.CL_UNORM_INT16:         'i2',
+        cl.CL_HALF_FLOAT:        'f2',  cl.CL_FLOAT:               'f4',
+		cl.CL_SIGNED_INT8:   'i1', cl.CL_SIGNED_INT16:   'i2', cl.CL_SIGNED_INT32:   'i4',
+		cl.CL_UNSIGNED_INT8: 'u1', cl.CL_UNSIGNED_INT16: 'u2', cl.CL_UNSIGNED_INT32: 'u4'
+	}
+
+    ORDER_SIZE_MAP = {  # CL_Rx, CL_RGx, CL_RGBx, CL_sRGBx are the same but have alpha=0 at their borders (?)
+       cl.CL_DEPTH:     1,  cl.CL_DEPTH_STENCIL: 1,
+       cl.CL_INTENSITY: 1,  cl.CL_LUMINANCE:     1,
+       cl.CL_R:         1,  cl.CL_Rx:    1, cl.CL_A:     1,
+       cl.CL_RG:        2,  cl.CL_RGx:   2, cl.CL_RA:    2,
+       cl.CL_RGB:       3,  cl.CL_RGBx:  3, cl.CL_sRGB:  3, cl.CL_sRGBx: 3,
+       cl.CL_RGBA:      4,  cl.CL_sRGBA: 4, cl.CL_BGRA:  4, cl.CL_sBGRA: 4,
+       cl.CL_ABGR:      4,  cl.CL_ARGB:  4
+    }
+
+    IMG_CL_TYPE = { 'f': 'float', 'h': 'half', 'i':'int', 'ui':'uint' }
+
+    @property
+    def _cl_type_suffix(self):
+        return self.IMGRW_SUFFIX_MAP[self.format.image_channel_data_type]
+
+    @property
+    def cl_image_read_func_name(self):
+        return 'image_read' + self._cl_type_suffix
+
+    @property
+    def cl_image_write_func_name(self):
+        return 'image_write' + self._cl_type_suffix
+
+    @property
+    def cl_type_name(self):
+        return self.IMG_CL_TYPE[self._cl_type_suffix]
+
+    @property
+    def dtype(self):
+        imfmt = self.format
+        dtype_str = self.FORMAT_DTYPE_MAP[ imfmt.image_channel_data_type ]
+        order_size = self.ORDER_SIZE_MAP[ imfmt.image_channel_order ]
+        if order_size == 1 or '>' in dtype_str:
+            return np.dtype(dtype_str)
+        else:
+            return np.dtype((dtype_str, order_size))
+
+    @property
+    def shape(self):
+        raw_shape = (self.depth, self.width, self.height)
+        return tuple( s for s in raw_shape if s > 1 )
+
+
+    def create_np_array(self):
+        return np.zeros(self.shape, self.dtype)
+
+
     def _init_empty(self, context, flags):  # __init__ boilerplate
         super(Image, self).__init__()
         context._add_ref(self)
@@ -2301,7 +2382,7 @@ class Context(CL):
         event.from_gl = True
         return event
 
-    def create_queue(self, device, flags=0, properties=None):
+    def create_queue(self, device=None, flags=0, properties=None):
         """Creates Queue object for the supplied device.
 
         Parameters:
@@ -2313,6 +2394,9 @@ class Context(CL):
         Returns:
             Queue object.
         """
+        if device is None:
+            assert len(self.devices) == 1
+            device = self.devices[0]
         return Queue(self, device, flags, properties)
 
 
@@ -2979,6 +3063,9 @@ class Platforms(CL):
 
     def __iter__(self):
         return iter(self.platforms)
+
+    def __getitem__(self, what):
+        return self.platforms.__getitem__(what)
 
     @staticmethod
     def get_ids():

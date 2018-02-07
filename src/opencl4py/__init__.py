@@ -38,9 +38,12 @@ Original author: Alexey Kazantsev <a.kazantsev@samsung.com>
 Init module.
 """
 from opencl4py import _cffi
-from opencl4py._py import CL, Platforms, Context, Buffer, Image, CLRuntimeError, skip, ensure_type
+from opencl4py._cffi import lib, gllib
+from opencl4py._py import * # we are all consenting adults here
+#from opencl4py._py import CL, Platforms, Context, Buffer, Image, CLRuntimeError, skip, ensure_type
 from opencl4py._cl_defines import *     # all the #defines
 
+__VERSION__ = "2.1"
 
 def get_ffi():
     """Returns CFFI() instance for the loaded shared library.
