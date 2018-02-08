@@ -185,6 +185,18 @@ class CL(object):
                 "%s() failed with error %s" %
                 ( funcname, CL.get_error_description(err)), err )
 
+
+    def __eq__(self, other):
+            if isinstance(other, type(self)):
+                return self.handle == other.handle
+            return NotImplemented
+
+    def __ne__(self, other):
+            result = self.__eq__(other)
+            if result is NotImplemented:
+                return result
+            return not result
+
     @property
     def handle(self):
         """Returns cffi handle to OpenCL object.
@@ -559,8 +571,8 @@ class Queue(CL):
             global_work_offset = cl.ffi.new("size_t[]", list(global_offset))
 
         n = self._lib.clEnqueueNDRangeKernel(
-            self.handle, kernel.handle, n_dims, global_work_offset,
-            global_work_size, local_work_size, n_events, wait_list, event)
+                self.handle, kernel.handle, n_dims, global_work_offset,
+                global_work_size, local_work_size, n_events, wait_list, event)
 
         self.check_error(n, "clEnqueueNDRangeKernel")
         return Event(event[0]) if event != cl.ffi.NULL else None
@@ -642,9 +654,11 @@ class Queue(CL):
         event = cl.ffi.new("cl_event*") if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
         ptr = self._lib.clEnqueueMapBuffer(
-            self.handle, buf.handle, blocking, flags, offset, size or (buf.size - offset),
-            n_events, wait_list, event, err)
+                self.handle, buf.handle, blocking, flags, offset,
+                size or (buf.size - offset), n_events, wait_list, event, err)
+
         self.check_error(err[0], "clEnqueueMapBuffer")
+
         return (None if event == cl.ffi.NULL else Event(event[0]),
                 int(cl.ffi.cast("size_t", ptr)))
 
@@ -665,8 +679,8 @@ class Queue(CL):
         ptr = CL.extract_ptr(ptr)
         wait_list, n_events = CL.get_wait_list(wait_for)
         n = self._lib.clEnqueueUnmapMemObject(
-            self.handle, obj.handle, cl.ffi.cast("void*", ptr),
-            n_events, wait_list, event)
+                self.handle, obj.handle, cl.ffi.cast("void*", ptr),
+                n_events, wait_list, event)
         self.check_error(n, "clEnqueueUnmapMemObject")
         return Event(event[0]) if event != cl.ffi.NULL else None
 
@@ -694,8 +708,8 @@ class Queue(CL):
         wait_list, n_events = CL.get_wait_list(wait_for)
         host_ptr, size = CL.extract_ptr_and_size(host_array, size)
         n = self._lib.clEnqueueReadBuffer(
-            self.handle, buf.handle, blocking, offset, size, host_ptr,
-            n_events, wait_list, event)
+                self.handle, buf.handle, blocking, offset, size, host_ptr,
+                n_events, wait_list, event)
         self.check_error(n, "clEnqueueReadBuffer")
         return Event(event[0]) if event != cl.ffi.NULL else None
 
@@ -737,8 +751,8 @@ class Queue(CL):
         wait_list, n_events = CL.get_wait_list(wait_for)
 
         n = self._lib.clEnqueueReadImage(
-            self.handle, image.handle, blocking, origin_struct, region_struct,
-            src_row_pitch, src_slice_pitch, host_ptr, n_events, wait_list, event)
+                self.handle, image.handle, blocking, origin_struct, region_struct,
+                src_row_pitch, src_slice_pitch, host_ptr, n_events, wait_list, event)
 
         self.check_error(n, "clEnqueueReadImage")
 
@@ -765,8 +779,8 @@ class Queue(CL):
         wait_list, n_events = CL.get_wait_list(wait_for)
         host_ptr, size = CL.extract_ptr_and_size(host_array, size)
         n = self._lib.clEnqueueWriteBuffer(
-            self.handle, buf.handle, blocking, offset, size, host_ptr,
-            n_events, wait_list, event)
+                self.handle, buf.handle, blocking, offset, size, host_ptr,
+                n_events, wait_list, event)
         self.check_error(n, "clEnqueueWriteBuffer")
         return Event(event[0]) if event != cl.ffi.NULL else None
 
@@ -809,8 +823,8 @@ class Queue(CL):
         wait_list, n_events = CL.get_wait_list(wait_for)
 
         n = self._lib.clEnqueueWriteImage(
-            self.handle, image.handle, blocking, origin_struct, region_struct,
-            src_row_pitch, src_slice_pitch, host_ptr, n_events, wait_list, event)
+                self.handle, image.handle, blocking, origin_struct, region_struct,
+                src_row_pitch, src_slice_pitch, host_ptr, n_events, wait_list, event)
 
         self.check_error(n, "clEnqueueWriteImage")
 
@@ -851,8 +865,8 @@ class Queue(CL):
         wait_list, n_events = CL.get_wait_list(wait_for)
 
         n = self._lib.clEnqueueFillImage(
-            self.handle, image.handle, ptr_pattern, origin_struct, region_struct,
-            n_events, wait_list, event)
+                self.handle, image.handle, ptr_pattern, origin_struct,
+                region_struct, n_events, wait_list, event)
 
         self.check_error(n, "clEnqueueFillImage")
 
@@ -883,8 +897,8 @@ class Queue(CL):
         event = cl.ffi.new("cl_event*") if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
         n = self._lib.clEnqueueCopyBuffer(
-            self.handle, src.handle, dst.handle, src_offset, dst_offset, size,
-            n_events, wait_list, event)
+                self.handle, src.handle, dst.handle, src_offset, dst_offset,
+                size, n_events, wait_list, event)
         self.check_error(n, "clEnqueueCopyBuffer")
         return Event(event[0]) if event != cl.ffi.NULL else None
 
@@ -927,11 +941,11 @@ class Queue(CL):
         _dst_origin = cl.ffi.new("size_t[]", dst_origin)
         _region = cl.ffi.new("size_t[]", region)
         n = self._lib.clEnqueueCopyBufferRect(
-            self.handle, src.handle, dst.handle,
-            _src_origin, _dst_origin, _region,
-            src_row_pitch, src_slice_pitch,
-            dst_row_pitch, dst_slice_pitch,
-            n_events, wait_list, event)
+                self.handle, src.handle, dst.handle,
+                _src_origin, _dst_origin, _region,
+                src_row_pitch, src_slice_pitch,
+                dst_row_pitch, dst_slice_pitch,
+                n_events, wait_list, event)
         self.check_error(n, "clEnqueueCopyBufferRect")
         return Event(event[0]) if event != cl.ffi.NULL else None
 
@@ -973,9 +987,9 @@ class Queue(CL):
         wait_list, n_events = CL.get_wait_list(wait_for)
 
         n = self._lib.clEnqueueCopyImage(
-            self.handle, src_image.handle, dst_image.handle,
-            src_origin_struct, dst_origin_struct, region_struct,
-            n_events, wait_list, event)
+                self.handle, src_image.handle, dst_image.handle,
+                src_origin_struct, dst_origin_struct, region_struct,
+                n_events, wait_list, event)
 
         self.check_error(n, "clEnqueueCopyImage")
 
@@ -1015,9 +1029,9 @@ class Queue(CL):
         wait_list, n_events = CL.get_wait_list(wait_for)
 
         n = self._lib.clEnqueueCopyImageToBuffer(
-            self.handle, src_image.handle, dst_buffer.handle,
-            src_origin_struct, region_struct, dst_offset,
-            n_events, wait_list, event)
+                self.handle, src_image.handle, dst_buffer.handle,
+                src_origin_struct, region_struct, dst_offset,
+                n_events, wait_list, event)
 
         self.check_error(n, "clEnqueueCopyImageToBuffer")
 
@@ -1057,9 +1071,9 @@ class Queue(CL):
         wait_list, n_events = CL.get_wait_list(wait_for)
 
         n = self._lib.clEnqueueCopyImageToBuffer(
-            self.handle, src_buffer.handle, dst_image.handle,
-            src_offset, dst_origin_struct, region_struct,
-            n_events, wait_list, event)
+                self.handle, src_buffer.handle, dst_image.handle,
+                src_offset, dst_origin_struct, region_struct,
+                n_events, wait_list, event)
 
         self.check_error(n, "clEnqueueCopyBufferToImage")
 
@@ -1092,8 +1106,8 @@ class Queue(CL):
         wait_list, n_events = CL.get_wait_list(wait_for)
         pattern, pattern_size = CL.extract_ptr_and_size(pattern, pattern_size)
         n = self._lib.clEnqueueFillBuffer(
-            self.handle, buf.handle, pattern, pattern_size, offset,
-            size or (buf.size - offset), n_events, wait_list, event)
+                self.handle, buf.handle, pattern, pattern_size, offset,
+                size or (buf.size - offset), n_events, wait_list, event)
         self.check_error(n, "clEnqueueFillBuffer")
         return Event(event[0]) if event != cl.ffi.NULL else None
 
@@ -1121,8 +1135,8 @@ class Queue(CL):
         else:
             ptr, size = CL.extract_ptr_and_size(svm_ptr, size)
         err = self._lib.clEnqueueSVMMap(
-            self.handle, blocking, flags, ptr, size or svm_ptr.size,
-            n_events, wait_list, event)
+                self.handle, blocking, flags, ptr, size or svm_ptr.size,
+                n_events, wait_list, event)
         self.check_error(err, "clEnqueueSVMMap")
         return None if event == cl.ffi.NULL else Event(event[0])
 
@@ -1145,7 +1159,7 @@ class Queue(CL):
         else:
             ptr, _size = CL.extract_ptr_and_size(svm_ptr, 0)
         err = self._lib.clEnqueueSVMUnmap(
-            self.handle, ptr, n_events, wait_list, event)
+                self.handle, ptr, n_events, wait_list, event)
         self.check_error(err, "clEnqueueSVMUnmap")
         return Event(event[0]) if event != cl.ffi.NULL else None
 
@@ -1171,7 +1185,7 @@ class Queue(CL):
         src, sz_src = CL.extract_ptr_and_size(src, 0)
         size = size or min(sz_src, sz_dst)
         n = self._lib.clEnqueueSVMMemcpy(
-            self.handle, blocking, dst, src, size, n_events, wait_list, event)
+                self.handle, blocking, dst, src, size, n_events, wait_list, event)
         self.check_error(n, "clEnqueueSVMMemcpy")
         return Event(event[0]) if event != cl.ffi.NULL else None
 
@@ -1202,8 +1216,8 @@ class Queue(CL):
             ptr, _ = CL.extract_ptr_and_size(svm_ptr, 0)
         pattern, _ = CL.extract_ptr_and_size(pattern, 0)
         n = self._lib.clEnqueueSVMMemFill(
-            self.handle, ptr, pattern, pattern_size, size,
-            n_events, wait_list, event)
+                self.handle, ptr, pattern, pattern_size, size,
+                n_events, wait_list, event)
         self.check_error(n, "clEnqueueSVMMemFill")
         return Event(event[0]) if event != cl.ffi.NULL else None
 
@@ -1228,8 +1242,8 @@ class Queue(CL):
             mem_object_arr[i] = o.handle
 
         err = self._lib.clEnqueueAcquireGLObjects(
-                self.handle, len(mem_objects), mem_object_arr,
-                n_events, wait_list, event)
+                    self.handle, len(mem_objects), mem_object_arr,
+                    n_events, wait_list, event)
         self.check_error(err, "clEnqueueAcquireGLObjects")
         return Event(event[0]) if event != cl.ffi.NULL else None
 
@@ -1254,8 +1268,8 @@ class Queue(CL):
             mem_object_arr[i] = o.handle
 
         err = self._lib.clEnqueueReleaseGLObjects(
-                self.handle, len(mem_objects), mem_object_arr,
-                n_events, wait_list, event)
+                    self.handle, len(mem_objects), mem_object_arr,
+                    n_events, wait_list, event)
         self.check_error(err, "clEnqueueReleaseGLObjects")
         return Event(event[0]) if event != cl.ffi.NULL else None
 
@@ -1431,14 +1445,14 @@ class Buffer(CL, MemObject):
 
         if parent is None:
             self._handle = self._lib.clCreateBuffer(
-                context.handle, flags, size, host_ptr, err)
+                            context.handle, flags, size, host_ptr, err)
         else:
             info = cl.ffi.new("size_t[]", 2)
             info[0] = origin
             info[1] = size
             self._handle = self._lib.clCreateSubBuffer(
-                parent.handle, flags, cl.CL_BUFFER_CREATE_TYPE_REGION,
-                info, err)
+                            parent.handle, flags, cl.CL_BUFFER_CREATE_TYPE_REGION,
+                            info, err)
 
         self.check_error(err[0], 'clCreateBuffer')
 
@@ -1462,7 +1476,7 @@ class Buffer(CL, MemObject):
 
         err = cl.ffi.new("cl_int *")
         self._handle = self._lib.clCreateFromGLBuffer(
-            context.handle, flags, self._gl_buffer, err)
+                            context.handle, flags, self._gl_buffer, err)
 
         self.check_error(err[0], 'clCreateFromGLBuffer')
         return self
@@ -1477,8 +1491,9 @@ class Buffer(CL, MemObject):
             origin: offset in bytes in the original buffer
             size: size in bytes of the new buffer.
         """
-        return Buffer(self._context, flags, self._host_array, size or self.size,
-                      self, origin)
+        return Buffer(  self._context, flags,
+                        self._host_array, size or self.size,
+                        self, origin)
 
 
     def _add_ref(self, obj):
@@ -1654,7 +1669,8 @@ class Image(CL, MemObject):
         self.image_desc = ensure_type("cl_image_desc *", image_desc)   # will the cast of buffer/mem_object work?
         err = cl.ffi.new("cl_int *")
         self._handle = self._lib.clCreateImage(
-            context.handle, flags, self.image_format, self.image_desc, host_ptr, err)
+                            context.handle, flags,
+                            self.image_format, self.image_desc, host_ptr, err)
         self.check_error(err[0], 'clCreateImage')
         self.from_gl = False
 
@@ -1679,7 +1695,7 @@ class Image(CL, MemObject):
         err = cl.ffi.new("cl_int *")
 
         self._handle = self._lib.clCreateFromGLRenderbuffer(
-            context.handle, flags, renderbuffer, err)
+                            context.handle, flags, renderbuffer, err)
 
         self.check_error(err[0], 'clCreateFromGLRenderbuffer')
         self.from_gl = True
@@ -1707,7 +1723,8 @@ class Image(CL, MemObject):
         err = cl.ffi.new("cl_int *")
 
         self._handle = self._lib.clCreateFromGLTexture(
-            context.handle, flags, texture_target, miplevel, texture, err)
+                            context.handle, flags, texture_target,
+                            miplevel, texture, err)
 
         self.check_error(err[0], 'clCreateFromGLTexture')
         self.from_gl = True
@@ -1895,8 +1912,8 @@ class WorkGroupInfo(CL):
     def _get_workgroup_info(self, code, buf):
         sz = cl.ffi.new("size_t *")
         err = self._lib.clGetKernelWorkGroupInfo(
-            self.kernel.handle, self.device.handle, code,
-            cl.ffi.sizeof(buf), buf, sz)
+                    self.kernel.handle, self.device.handle, code,
+                    cl.ffi.sizeof(buf), buf, sz)
         self.check_error(err, "clGetKernelWorkGroupInfo")
         return sz[0]
 
@@ -2034,7 +2051,7 @@ class Kernel(CL):
     def _get_kernel_info(self, code, buf):
         sz = cl.ffi.new("size_t *")
         err = self._lib.clGetKernelInfo(
-            self.handle, code, cl.ffi.sizeof(buf), buf, sz)
+                    self.handle, code, cl.ffi.sizeof(buf), buf, sz)
         self.check_error(err, "clGetKernelInfo")
         return sz[0]
 
@@ -2169,8 +2186,8 @@ class Program(CL):
         sz = cl.ffi.new("size_t *")
         for dev in device_list:
             e = self._lib.clGetProgramBuildInfo(
-                self.handle, dev, cl.CL_PROGRAM_BUILD_LOG, cl.ffi.sizeof(log),
-                log, sz)
+                    self.handle, dev, cl.CL_PROGRAM_BUILD_LOG,
+                    cl.ffi.sizeof(log), log, sz)
             if e or sz[0] <= 0:
                 self.build_logs.append("")
                 continue
@@ -2183,7 +2200,7 @@ class Program(CL):
         strings = cl.ffi.new("char*[]", 1)
         strings[0] = srcptr
         self._handle = self._lib.clCreateProgramWithSource(
-            self.context.handle, 1, strings, cl.ffi.NULL, err)
+                            self.context.handle, 1, strings, cl.ffi.NULL, err)
         del srcptr
         self.check_error(err[0], "clCreateProgramWithSource")
 
@@ -2231,8 +2248,8 @@ class Program(CL):
         binary_status = cl.ffi.new("cl_int[]", count)
         err = cl.ffi.new("cl_int *")
         self._handle = self._lib.clCreateProgramWithBinary(
-            self.context.handle, count, device_list, lengths,
-            binaries_ffi, binary_status, err)
+                            self.context.handle, count, device_list, lengths,
+                            binaries_ffi, binary_status, err)
         if err[0]:
             self._handle = None
             statuses = [CL.get_error_name_from_code(s) for s in binary_status]
@@ -2281,7 +2298,8 @@ class Pipe(CL):
         self._max_packets = max_packets
         err = cl.ffi.new("cl_int *")
         self._handle = self._lib.clCreatePipe(
-            context.handle, flags, packet_size, max_packets, cl.ffi.NULL, err)
+                            context.handle, flags, packet_size, max_packets,
+                            cl.ffi.NULL, err)
         self.check_error(err[0], "clCreatePipe")
 
     @property
@@ -2330,7 +2348,7 @@ class SVM(CL):
         self._size = size
         self._alignment = alignment
         self._handle = self._lib.clSVMAlloc(
-            context.handle, flags, size, alignment)
+                            context.handle, flags, size, alignment)
         if self._handle == cl.ffi.NULL:
             self._handle = None
             raise CLRuntimeError("clSVMAlloc() failed", cl.CL_INVALID_VALUE)
@@ -2456,7 +2474,6 @@ class Context(CL):
             else:
                 raise CLRuntimeError( "Could not find CL platform corresponding to current GL context" )
 
-
         if isinstance(platform, Platform):
             cl_platform = platform.handle
         else:
@@ -2546,7 +2563,8 @@ class Context(CL):
 
         err = cl.ffi.new("cl_int *")
         self._handle = self._lib.clCreateContext(
-            new_ctx_props, n_devices, device_list, cl.ffi.NULL, cl.ffi.NULL, err)
+                            new_ctx_props, n_devices, device_list,
+                            cl.ffi.NULL, cl.ffi.NULL, err)
         self.check_error(err[0], "clCreateContext")
 
     def _add_ref(self, obj):
@@ -2562,10 +2580,12 @@ class Context(CL):
 
     def get_supported_image_formats(self, flags=cl.CL_MEM_READ_ONLY, image_type=cl.CL_MEM_OBJECT_IMAGE2D):
         n_fmts = cl.ffi.new("cl_uint*")
-        status = self._lib.clGetSupportedImageFormats(self.handle, flags, image_type, 0, cl.ffi.NULL, n_fmts)
+        status = self._lib.clGetSupportedImageFormats( self.handle,
+                    flags, image_type, 0, cl.ffi.NULL, n_fmts )
         self.check_error(status, "clGetSupportedImageFormats")
         fmts = cl.ffi.new("cl_image_format[]", n_fmts[0])
-        status = self._lib.clGetSupportedImageFormats(self.handle, flags, image_type, n_fmts[0], fmts, cl.ffi.NULL)
+        status = self._lib.clGetSupportedImageFormats( self.handle,
+                    flags, image_type, n_fmts[0], fmts, cl.ffi.NULL )
         self.check_error(status, "clGetSupportedImageFormats")
         return fmts
 
@@ -3088,8 +3108,8 @@ class Device(CL):
     def max_work_item_sizes(self):
         value = cl.ffi.new("size_t[]", self.max_work_item_dimensions)
         err = self._lib.clGetDeviceInfo(
-            self._handle, cl.CL_DEVICE_MAX_WORK_ITEM_SIZES,
-            cl.ffi.sizeof(value), value, cl.ffi.NULL)
+                    self._handle, cl.CL_DEVICE_MAX_WORK_ITEM_SIZES,
+                    cl.ffi.sizeof(value), value, cl.ffi.NULL)
         if err:
             return None
         return list(value)
@@ -3125,28 +3145,28 @@ class Device(CL):
     def _get_device_info_bool(self, name):
         value = cl.ffi.new("cl_bool[]", 1)
         err = self._lib.clGetDeviceInfo(
-            self._handle, name, cl.ffi.sizeof(value), value, cl.ffi.NULL)
+                self._handle, name, cl.ffi.sizeof(value), value, cl.ffi.NULL)
         self.check_error(err, "clGetDeviceInfo")
         return bool(value[0])
 
     def _get_device_info_int(self, name):
         value = cl.ffi.new("uint64_t[]", 1)
         err = self._lib.clGetDeviceInfo(
-            self._handle, name, cl.ffi.sizeof(value), value, cl.ffi.NULL)
+                self._handle, name, cl.ffi.sizeof(value), value, cl.ffi.NULL)
         self.check_error(err, "clGetDeviceInfo")
         return int(value[0])
 
     def _get_device_info_str(self, name):
         value = cl.ffi.new("char[]", 1024)
         err = self._lib.clGetDeviceInfo(
-            self._handle, name, cl.ffi.sizeof(value), value, cl.ffi.NULL)
+                self._handle, name, cl.ffi.sizeof(value), value, cl.ffi.NULL)
         self.check_error(err, "clGetDeviceInfo")
         return cl.ffi.string(value).decode("utf-8")
 
     def _get_device_info_voidp(self, name):
         value = cl.ffi.new("void**")
         err = self._lib.clGetDeviceInfo(
-            self._handle, name, cl.ffi.sizeof(value), value, cl.ffi.NULL)
+                self._handle, name, cl.ffi.sizeof(value), value, cl.ffi.NULL)
         self.check_error(err, "clGetDeviceInfo")
         return value[0]
 
@@ -3225,7 +3245,7 @@ class Platform(CL):
     @property
     def extensions(self):
         if not self._extensions:
-            self._extensions = [ext.strip() for ext in self._get_platform_info_str(
+            self._extensions = [ ext.strip() for ext in self._get_platform_info_str(
                 cl.CL_PLATFORM_EXTENSIONS).split(' ')
                 if ext.strip()]
         return self._extensions
