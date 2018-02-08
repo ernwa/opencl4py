@@ -295,7 +295,7 @@ class Sampler(CL):  # TODO: test, implement clCreateSamplerWithProperties
         except AttributeError:
             clctx = cl.ffi.new('cl_context')
             self._get_sampler_info( cl.CL_SAMPLER_CONTEXT, clctx)
-            self._context = Context(clctx)
+            self._context = Context.from_cl_context( clctx )
             return self._context
 
     # TODO: fix these too
@@ -391,29 +391,40 @@ class Event(CL):
 
     @property
     def command_execution_status(self):
-        return self._get_event_info( cl.CL_EVENT_COMMAND_EXECUTION_STATUS, 'cl_int' )
+        param_value = cl.ffi.new('cl_int*')
+        self._get_event_info( cl.CL_EVENT_COMMAND_EXECUTION_STATUS, param_value )
+        return int(param_value)
 
     @property
     def reference_count(self):
-        return self._get_event_info( cl.CL_EVENT_REFERENCE_COUNT, 'cl_int' )
+        param_value = cl.ffi.new('cl_uint*')
+        self._get_event_info( cl.CL_EVENT_REFERENCE_COUNT, param_value )
+        return int(param_value)
 
     @property
     def command_type(self):
-        return self._get_event_info( cl.CL_EVENT_COMMAND_TYPE, 'cl_command_type' )
+        param_value = cl.ffi.new('cl_command_type*')
+        self._get_event_info( cl.CL_EVENT_COMMAND_TYPE, param_value )
+        return int(param_value)
 
+### foo
     @property
-    def context(self):
-        handle = self._get_event_info( cl.CL_EVENT_CONTEXT, 'cl_context' )
-        return Context()
+    def queue(self):
+        try:
+            return self._queue
+        except AttributeError:
+            handle = self._get_event_info( cl.CL_EVENT_CONTEXT, 'cl_context' )
+            self._queue = Queue.from_cl_context( handle )
+            return self._queue
 
-    def _get_event_info(self, param_name, rettype):
-        param_value = cl.ffi.new(rettype+'*')
-        param_value_size = cl.ffi.sizeof(param_value)
+
+    def _get_event_info(self, param_name, param_value):
+        param_value_size_ret = cl.ffi.new('size_t*')
         errcode = self.lib.clGetEventInfo( self.handle,
-                                            param_name, param_value_size,
-                                            param_value, None )
+                                           param_name, cl.ffi.sizeof(param_value),
+                                           param_value, param_value_size_ret )
         self.check_error(errcode, 'clGetEventInfo')
-        return param_value
+        return param_value_size_ret[0]
 
 
     def _release(self):
@@ -432,6 +443,7 @@ class Queue(CL):
         context: context associated with this queue.
         device: device associated with this queue.
     """
+
     def __init__(self, context, device, flags, properties=None):
         """Creates the OpenCL command queue associated with the given device.
 
@@ -445,6 +457,7 @@ class Queue(CL):
         context._add_ref(self)
         self._context = context
         self._device = device
+
         err = cl.ffi.new("cl_int *")
         if properties is None or device.version < 2.0:
             fnme = "clCreateCommandQueue"
@@ -465,19 +478,48 @@ class Queue(CL):
                 context.handle, device.handle, props, err)
         self.check_error(err[0], fnme)
 
+
+    @classmethod
+    def from_cl_queue(cls, queue_id):
+        self = cls.__new__(cls)
+        self._init_empty()
+        self._handle = queue_id
+        assert self.device         # populate device list
+
+    def _get_command_queue_info(self, code, buf):
+        sz = cl.ffi.new("size_t *")
+        err = self._lib.clGetCommandQueueInfo(
+            self.handle, code, cl.ffi.sizeof(buf), buf, sz)
+        self.check_error(err, "clGetCommandQueueInfo")
+        return sz[0]
+
     @property
     def context(self):
         """
         context associated with this queue.
         """
-        return self._context
+        try:
+            return self._context
+        except AttributeError:
+            context_id = cl.ffi.new('cl_context*')
+            self._get_command_queue_info(self.handle, context_id)
+            self._context = Context.from_cl_context(context_id)
+            return self._context
+
 
     @property
     def device(self):
         """
         device associated with this queue.
         """
-        return self._device
+        try:
+            return self._device
+        except AttributeError:
+            device_id = cl.ffi.new('cl_device_id*')
+            self._get_command_queue_info(self.handle, device_id)
+            self._device = Device(device_id)
+            return self._device
+
 
     def execute_kernel(self, kernel, global_size, local_size=None,
                        global_offset=None, wait_for=None, need_event=False):
@@ -494,7 +536,7 @@ class Queue(CL):
         Returns:
             Event object or None if need_event == False.
         """
-        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        event = cl.ffi.new("cl_event*") if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
 
         n_dims = len(global_size)
@@ -564,7 +606,7 @@ class Queue(CL):
         slice_pitch = cl.ffi.new("size_t *")
 
         err = cl.ffi.new("cl_int *")
-        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        event = cl.ffi.new("cl_event*") if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
 
         ptr = self._lib.clEnqueueMapImage(
@@ -597,7 +639,7 @@ class Queue(CL):
                                 (cffi void* converted to int).
         """
         err = cl.ffi.new("cl_int *")
-        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        event = cl.ffi.new("cl_event*") if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
         ptr = self._lib.clEnqueueMapBuffer(
             self.handle, buf.handle, blocking, flags, offset, size or (buf.size - offset),
@@ -619,7 +661,7 @@ class Queue(CL):
         Returns:
             Event object or None if need_event == False.
         """
-        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        event = cl.ffi.new("cl_event*") if need_event else cl.ffi.NULL
         ptr = CL.extract_ptr(ptr)
         wait_list, n_events = CL.get_wait_list(wait_for)
         n = self._lib.clEnqueueUnmapMemObject(
@@ -648,7 +690,7 @@ class Queue(CL):
         Returns:
             Event object or None if need_event == False.
         """
-        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        event = cl.ffi.new("cl_event*") if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
         host_ptr, size = CL.extract_ptr_and_size(host_array, size)
         n = self._lib.clEnqueueReadBuffer(
@@ -691,7 +733,7 @@ class Queue(CL):
 
         origin_struct = cl.ffi.new("size_t[3]", origin)
         region_struct = cl.ffi.new("size_t[3]", region)
-        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        event = cl.ffi.new("cl_event*") if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
 
         n = self._lib.clEnqueueReadImage(
@@ -719,7 +761,7 @@ class Queue(CL):
         Returns:
             Event object or None if need_event == False.
         """
-        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        event = cl.ffi.new("cl_event*") if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
         host_ptr, size = CL.extract_ptr_and_size(host_array, size)
         n = self._lib.clEnqueueWriteBuffer(
@@ -763,7 +805,7 @@ class Queue(CL):
         origin_struct = cl.ffi.new("size_t[3]", origin)
         region_struct = cl.ffi.new("size_t[3]", region)
 
-        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        event = cl.ffi.new("cl_event*") if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
 
         n = self._lib.clEnqueueWriteImage(
@@ -805,7 +847,7 @@ class Queue(CL):
         origin_struct = cl.ffi.new("size_t[3]", origin)
         region_struct = cl.ffi.new("size_t[3]", region)
 
-        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        event = cl.ffi.new("cl_event*") if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
 
         n = self._lib.clEnqueueFillImage(
@@ -838,7 +880,7 @@ class Queue(CL):
             # assert src.size == dst.size, 'buffer sizes must match'
             size = min(src.size - src_offset, dst.size - dst_offset)
 
-        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        event = cl.ffi.new("cl_event*") if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
         n = self._lib.clEnqueueCopyBuffer(
             self.handle, src.handle, dst.handle, src_offset, dst_offset, size,
@@ -879,7 +921,7 @@ class Queue(CL):
         Returns:
             Event object or None if need_event == False.
         """
-        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        event = cl.ffi.new("cl_event*") if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
         _src_origin = cl.ffi.new("size_t[]", src_origin)
         _dst_origin = cl.ffi.new("size_t[]", dst_origin)
@@ -927,7 +969,7 @@ class Queue(CL):
         dst_origin_struct = cl.ffi.new("size_t[3]", dst_origin)
         region_struct = cl.ffi.new("size_t[3]", region)
 
-        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        event = cl.ffi.new("cl_event*") if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
 
         n = self._lib.clEnqueueCopyImage(
@@ -969,7 +1011,7 @@ class Queue(CL):
         src_origin_struct = cl.ffi.new("size_t[3]", src_origin)
         region_struct = cl.ffi.new("size_t[3]", region)
 
-        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        event = cl.ffi.new("cl_event*") if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
 
         n = self._lib.clEnqueueCopyImageToBuffer(
@@ -1011,7 +1053,7 @@ class Queue(CL):
         dst_origin_struct = cl.ffi.new("size_t[3]", dst_origin)
         region_struct = cl.ffi.new("size_t[3]", region)
 
-        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        event = cl.ffi.new("cl_event*") if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
 
         n = self._lib.clEnqueueCopyImageToBuffer(
@@ -1046,7 +1088,7 @@ class Queue(CL):
         if size is None:
             size = buf.size
 
-        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        event = cl.ffi.new("cl_event*") if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
         pattern, pattern_size = CL.extract_ptr_and_size(pattern, pattern_size)
         n = self._lib.clEnqueueFillBuffer(
@@ -1072,7 +1114,7 @@ class Queue(CL):
         Returns:
             Event object or None if need_event == False.
         """
-        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        event = cl.ffi.new("cl_event*") if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
         if isinstance(svm_ptr, SVM):
             ptr = svm_ptr.handle
@@ -1096,7 +1138,7 @@ class Queue(CL):
         Returns:
             Event object or None if need_event == False.
         """
-        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        event = cl.ffi.new("cl_event*") if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
         if isinstance(svm_ptr, SVM):
             ptr = svm_ptr.handle
@@ -1123,7 +1165,7 @@ class Queue(CL):
         Returns:
             Event object or None if need_event == False.
         """
-        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        event = cl.ffi.new("cl_event*") if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
         dst, sz_dst = CL.extract_ptr_and_size(dst, 0)
         src, sz_src = CL.extract_ptr_and_size(src, 0)
@@ -1152,7 +1194,7 @@ class Queue(CL):
         Returns:
             Event object or None if need_event == False.
         """
-        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        event = cl.ffi.new("cl_event*") if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
         if isinstance(svm_ptr, SVM):
             ptr = svm_ptr.handle
@@ -1178,7 +1220,7 @@ class Queue(CL):
             Event object or None if need_event == False.
         """
 
-        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        event = cl.ffi.new("cl_event*") if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
 
         mem_object_arr = cl.ffi.new("cl_mem[]", len(mem_objects))
@@ -1204,7 +1246,7 @@ class Queue(CL):
             Event object or None if need_event == False.
         """
 
-        event = cl.ffi.new("cl_event[]", 1) if need_event else cl.ffi.NULL
+        event = cl.ffi.new("cl_event*") if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
 
         mem_object_arr = cl.ffi.new("cl_mem[]", len(mem_objects))
@@ -1219,6 +1261,9 @@ class Queue(CL):
 
 
     def marker(self):
+        """ Create an event dependent on all previous commands
+            issued to this queue.
+        """
         event = cl.ffi.new("cl_event*")
         n = self._lib.clEnqueueMarker(self.handle, event)
         self.check_error(n, "clEnqueueMarker")
@@ -1226,27 +1271,33 @@ class Queue(CL):
 
 
     def barrier(self):
-        """all ensuing operations wait until preceding operations complete"""
+        """ Makes all following issued commands wait until
+            previous commands in this queue complete
+        """
         n = self._lib.clEnqueueBarrier(self.handle)
         self.check_error(n, "clEnqueueBarrier")
 
 
     def flush(self):
-        """Flushes the queue.
+        """ Waits for all previous commands issued to this queue to
+            be started on the device(s)
         """
         n = self._lib.clFlush(self.handle)
         self.check_error(n, "clFlush")
 
+
     def finish(self):
-        """Waits for all previous commands issued to this queue to end.
+        """ Waits for all previous commands issued to this queue to complete.
         """
         n = self._lib.clFinish(self.handle)
         self.check_error(n, "clFinish")
+
 
     def _release(self):
         if self.handle is not None:
             self._lib.clReleaseCommandQueue(self.handle)
             self._handle = None
+
 
     def __del__(self):
         if self.context.handle is None:
@@ -1264,15 +1315,27 @@ class MemObject(object):    # implements clGetMemObjectInfo interface
 
     @property
     def flags(self):
-        buf = cl.ffi.new("cl_mem_flags *")
-        self._get_mem_object_info(cl.CL_MEM_FLAGS, buf)
-        return int(buf[0])
+        """
+        Flags supplied for the creation of this buffer.
+        """
+        try:
+            return self._flags
+        except AttributeError:
+            buf = cl.ffi.new("cl_mem_flags *")
+            self._get_mem_object_info(cl.CL_MEM_FLAGS, buf)
+            self._flags = int(buf[0])
+            return self._flags
 
     @property
     def size(self):
-        buf = cl.ffi.new("size_t *")
-        self._get_mem_object_info(cl.CL_MEM_SIZE, buf)
-        return int(buf[0])
+        try:
+            return self._size
+        except AttributeError:
+            buf = cl.ffi.new("size_t *")
+            self._get_mem_object_info(cl.CL_MEM_SIZE, buf)
+            self._size = int(buf[0])
+            return self._size
+
 
     @property
     def host_ptr(self):
@@ -1280,11 +1343,13 @@ class MemObject(object):    # implements clGetMemObjectInfo interface
         self._get_mem_object_info(cl.CL_MEM_HOST_PTR, buf)
         return buf[0]
 
+
     @property
     def map_count(self):
         buf = cl.ffi.new("cl_uint *")
         self._get_mem_object_info(cl.CL_MEM_MAP_COUNT, buf)
         return int(buf[0])
+
 
     @property
     def reference_count(self):
@@ -1292,11 +1357,17 @@ class MemObject(object):    # implements clGetMemObjectInfo interface
         self._get_mem_object_info(cl.CL_MEM_REFERENCE_COUNT, buf)
         return int(buf[0])
 
+
     @property
     def context(self):
-        buf = cl.ffi.new("cl_context *")
-        self._get_mem_object_info(cl.CL_MEM_CONTEXT, buf)
-        return int(buf[0])
+        try:
+            return self._context
+        except ValueError:
+            buf = cl.ffi.new("cl_context *")
+            self._get_mem_object_info(cl.CL_MEM_CONTEXT, buf)
+            self._context = Context.from_cl_context(buf[0])
+            return self._context
+
 
     def _get_mem_object_info(self, code, buf):
        sz = cl.ffi.new("size_t *")
@@ -1304,6 +1375,7 @@ class MemObject(object):    # implements clGetMemObjectInfo interface
            code, cl.ffi.sizeof(buf), buf, sz)
        self.check_error(err, 'clGetMemObjectInfo')
        return sz[0]
+
 
     @property
     def gl_object_info(self):
@@ -1344,6 +1416,7 @@ class Buffer(CL, MemObject):
         self._flags = flags
         return self
 
+
     def __init__(self, context, flags, host_array=None, size=None,
                  parent=None, origin=0):
         self._init_empty(context, flags)
@@ -1355,6 +1428,7 @@ class Buffer(CL, MemObject):
         self._size = size
         self._origin = origin
         err = cl.ffi.new("cl_int *")
+
         if parent is None:
             self._handle = self._lib.clCreateBuffer(
                 context.handle, flags, size, host_ptr, err)
@@ -1420,26 +1494,13 @@ class Buffer(CL, MemObject):
 
 
     @property
-    def context(self):
-        """
-        Context object associated with this buffer.
-        """
-        return self._context
-
-    @property
-    def flags(self):
-        """
-        Flags supplied for the creation of this buffer.
-        """
-        return self._flags
-
-    @property
     def host_array(self):
         """
         Host array reference, such as numpy array,
         will be stored only if flags include CL_MEM_USE_HOST_PTR.
         """
         return self._host_array
+
 
     @property
     def host_array_size(self):
@@ -1557,7 +1618,7 @@ class Image(CL, MemObject):
     def dtype(self):
         imfmt = self.format
         dtype_str = self.FORMAT_DTYPE_MAP[ imfmt.image_channel_data_type ]
-        order_size = self.ORDER_SIZE_MAP[ imfmt.image_channel_order ]
+        order_size =  self.ORDER_SIZE_MAP[ imfmt.image_channel_order ]
         if order_size == 1 or '>' in dtype_str:
             return np.dtype(dtype_str)
         else:
@@ -1670,12 +1731,6 @@ class Image(CL, MemObject):
         """
         return self._context
 
-    # @property
-    # def flags(self):
-    #     """
-    #     Flags supplied for the creation of this buffer.
-    #     """
-    #     return self._flags
 
     @property
     def host_array(self):
@@ -1685,6 +1740,7 @@ class Image(CL, MemObject):
         """
         return self._host_array
 
+
     @property
     def format(self):
         """Returns image format descriptor specified when image is created.
@@ -1692,6 +1748,7 @@ class Image(CL, MemObject):
         buf = cl.ffi.new("cl_image_format *")
         self._get_image_info(cl.CL_IMAGE_FORMAT, buf)
         return buf[0]
+
 
     @property
     def element_size(self):
@@ -1789,7 +1846,7 @@ class WorkGroupInfo(CL):
                             kernel is not a built-in kernel.
         """
         buf = cl.ffi.new("size_t[]", 3)
-        self._get_info(cl.CL_KERNEL_GLOBAL_WORK_SIZE, buf)
+        self._get_workgroup_info(cl.CL_KERNEL_GLOBAL_WORK_SIZE, buf)
         return int(buf[0]), int(buf[1]), int(buf[2])
 
     @property
@@ -1798,7 +1855,7 @@ class WorkGroupInfo(CL):
            on this device.
         """
         buf = cl.ffi.new("size_t *")
-        self._get_info(cl.CL_KERNEL_WORK_GROUP_SIZE, buf)
+        self._get_workgroup_info(cl.CL_KERNEL_WORK_GROUP_SIZE, buf)
         return int(buf[0])
 
     @property
@@ -1807,7 +1864,7 @@ class WorkGroupInfo(CL):
            __attribute__((reqd_work_group_size(X, Y, Z))) qualifier.
         """
         buf = cl.ffi.new("size_t[]", 3)
-        self._get_info(cl.CL_KERNEL_COMPILE_WORK_GROUP_SIZE, buf)
+        self._get_workgroup_info(cl.CL_KERNEL_COMPILE_WORK_GROUP_SIZE, buf)
         return int(buf[0]), int(buf[1]), int(buf[2])
 
     @property
@@ -1815,7 +1872,7 @@ class WorkGroupInfo(CL):
         """Returns the amount of local memory in bytes being used by a kernel.
         """
         buf = cl.ffi.new("uint64_t *")
-        self._get_info(cl.CL_KERNEL_LOCAL_MEM_SIZE, buf)
+        self._get_workgroup_info(cl.CL_KERNEL_LOCAL_MEM_SIZE, buf)
         return int(buf[0])
 
     @property
@@ -1823,7 +1880,7 @@ class WorkGroupInfo(CL):
         """Returns the preferred multiple of workgroup size for launch.
         """
         buf = cl.ffi.new("size_t *")
-        self._get_info(cl.CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE, buf)
+        self._get_workgroup_info(cl.CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE, buf)
         return int(buf[0])
 
     @property
@@ -1832,10 +1889,10 @@ class WorkGroupInfo(CL):
            used by each workitem in the kernel.
         """
         buf = cl.ffi.new("uint64_t *")
-        self._get_info(cl.CL_KERNEL_PRIVATE_MEM_SIZE, buf)
+        self._get_workgroup_info(cl.CL_KERNEL_PRIVATE_MEM_SIZE, buf)
         return int(buf[0])
 
-    def _get_info(self, code, buf):
+    def _get_workgroup_info(self, code, buf):
         sz = cl.ffi.new("size_t *")
         err = self._lib.clGetKernelWorkGroupInfo(
             self.kernel.handle, self.device.handle, code,
@@ -2376,14 +2433,13 @@ class Context(CL):
             assert all([ dev.platform == self._platform for dev in self.devices ])
             return self._platform
 
-
-
     @classmethod
-    def from_cl_id(cls, context_id):
+    def from_cl_context(cls, context_id):
         self = cls.__new__(cls)
         self._init_empty()
         self._handle = context_id
-        devs = self.devices         # populate device list
+        assert self.devices         # populate device list
+        assert self.platform        # populate platform
 
 
     @classmethod
@@ -3115,13 +3171,17 @@ class Platform(CL):
         self._extensions = None
         self._extension_functions = {}
 
+    def _get_platform_info(self, name, value):
+        sz = cl.ffi.new('size_t*')
+        err = self._lib.clGetPlatformInfo(
+            self._handle, name, cl.ffi.sizeof(value), value, sz)
+        self.check_error(err, "clGetPlatformInfo")
+        return sz
 
 
     def _get_platform_info_str(self, name):
         value = cl.ffi.new("char[]", 1024)
-        err = self._lib.clGetPlatformInfo(
-            self._handle, name, cl.ffi.sizeof(value), value, cl.ffi.NULL)
-        self.check_error(err, "clGetPlatformInfo")
+        self._get_platform_info(name, value)
         return cl.ffi.string(value).decode("utf-8")
 
 
