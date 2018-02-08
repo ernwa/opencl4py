@@ -230,6 +230,88 @@ class CL(object):
         return "%s (%d)" % (CL.get_error_name_from_code(code), code)
 
 
+class Sampler(CL):  # TODO: test, implement clCreateSamplerWithProperties
+    def __init__(self, context, normalized_coords, addressing_mode, filter_mode ):
+        """
+        Creates a cl sampler object.
+
+        Parameters:
+            context:            Context object
+
+            normalized_coords:  determines if the image coordinates specified
+                                    are normalized (True, False)
+
+            addressing_mode:    specifies how out-of-range image coordinates are
+                                    handled when reading from an image
+                                    (CL_ADDRESS_MIRRORED_REPEAT, CL_ADDRESS_REPEAT,
+                                     CL_ADDRESS_CLAMP_TO_EDGE, CL_ADDRESS_CLAMP,
+                                     CL_ADDRESS_NONE)
+
+            filter_mode:        specifies the type of filter that must be applied
+                                    when reading an image.
+                                    (CL_FILTER_NEAREST, CL_FILTER_LINEAR)
+
+        Returns:
+
+        """
+        super(Context, self).__init__()
+        self.context = context
+        normalized_coords = cl.CL_TRUE if normalized_coords else cl.CL_FALSE
+        errcode_ret = cl.ffi.new('cl_int *')
+        self.sampler = self.lib.clCreateSampler(  context.handle,
+                                        normalized_coords,
+                                        addressing_mode,
+                                        filter_mode,
+                                        errcode_ret )
+        self.check_error(errcode_ret, 'clCreateSampler')
+
+    def retain(self):
+        errcode = self.lib.clRetainSampler( self.sampler )
+        self.check_error(errcode, 'clRetainSampler')
+
+    def release(self):
+        errcode = self.lib.clReleaseSampler( self.sampler )
+        self.check_error(errcode, 'clRetainSampler')
+
+    def _get_sampler_info(self, param_name, buf ):
+        sz = cl.ffi.new("size_t *")
+        param_value_size = cl.ffi.sizeof(buf) if buf else 0
+        errcode = self.lib.clGetSamplerInfo( self.sampler,
+                                             param_name, param_value_size,
+                                             buf, sz )
+        self.check_error(errcode, 'clGetSamplerInfo')
+        return sz
+
+    @property
+    def reference_count(self):
+        count = cl.ffi.new('cl_uint')
+        self._get_sampler_info( cl.CL_SAMPLER_REFERENCE_COUNT, count)
+        return count
+
+    @property
+    def context(self):
+        try:
+            return self._context
+        except AttributeError:
+            clctx = cl.ffi.new('cl_context')
+            self._get_sampler_info( cl.CL_SAMPLER_CONTEXT, clctx)
+            self._context = Context(clctx)
+            return self._context
+
+    # TODO: fix these too
+    # @property
+    # def normalized_coords(self):
+    #     return self._get_sampler_info( cl.CL_SAMPLER_NORMALIZED_COORDS, 'cl_bool')
+    #
+    # @property
+    # def addressing_mode(self):
+    #     return self._get_sampler_info( cl.CL_SAMPLER_ADDRESSING_MODE, 'cl_addressing_mode')
+    #
+    # @property
+    # def filter_mode(self):
+    #     return self._get_sampler_info( cl.CL_SAMPLER_FILTER_MODE, 'cl_filter_mode')
+
+
 class Event(CL):
     """Holds OpenCL event.
 
@@ -272,6 +354,7 @@ class Event(CL):
         """
         Event.wait_multi((self,), self._lib)
 
+
     def get_profiling_info(self, raise_exception=True):
         """Get profiling info of the event.
 
@@ -305,6 +388,33 @@ class Event(CL):
             for err in errs.values():
                 self.check_error(err, 'clGetEventProfilingInfo')
         return (vles, errs)
+
+    @property
+    def command_execution_status(self):
+        return self._get_event_info( cl.CL_EVENT_COMMAND_EXECUTION_STATUS, 'cl_int' )
+
+    @property
+    def reference_count(self):
+        return self._get_event_info( cl.CL_EVENT_REFERENCE_COUNT, 'cl_int' )
+
+    @property
+    def command_type(self):
+        return self._get_event_info( cl.CL_EVENT_COMMAND_TYPE, 'cl_command_type' )
+
+    @property
+    def context(self):
+        handle = self._get_event_info( cl.CL_EVENT_CONTEXT, 'cl_context' )
+        return Context()
+
+    def _get_event_info(self, param_name, rettype):
+        param_value = cl.ffi.new(rettype+'*')
+        param_value_size = cl.ffi.sizeof(param_value)
+        errcode = self.lib.clGetEventInfo( self.handle,
+                                            param_name, param_value_size,
+                                            param_value, None )
+        self.check_error(errcode, 'clGetEventInfo')
+        return param_value
+
 
     def _release(self):
         if self.handle is not None:
@@ -1108,6 +1218,18 @@ class Queue(CL):
         return Event(event[0]) if event != cl.ffi.NULL else None
 
 
+    def marker(self):
+        event = cl.ffi.new("cl_event*")
+        n = self._lib.clEnqueueMarker(self.handle, event)
+        self.check_error(n, "clEnqueueMarker")
+        return event
+
+
+    def barrier(self):
+        """all ensuing operations wait until preceding operations complete"""
+        n = self._lib.clEnqueueBarrier(self.handle)
+        self.check_error(n, "clEnqueueBarrier")
+
 
     def flush(self):
         """Flushes the queue.
@@ -1789,10 +1911,9 @@ class Kernel(CL):
             size: size of the vle (may be None for buffers and scalars).
         """
         if isinstance(vle, Buffer) or isinstance(vle, Image) or isinstance(vle, Pipe):
-            arg_value = cl.ffi.new("cl_mem[]", 1)
-            arg_value[0] = vle.handle
+            arg_value = cl.ffi.new("cl_mem*", vle.handle)
             arg_size = cl.ffi.sizeof("cl_mem")
-        elif hasattr(vle, "__array_interface__"):
+        elif hasattr(vle, "__array_interface__"):   # constant data
             arg_value = cl.ffi.cast("const void*",
                                     vle.__array_interface__["data"][0])
             arg_size = vle.nbytes if size is None else size
@@ -1806,6 +1927,9 @@ class Kernel(CL):
             arg_size = size
         elif isinstance(vle, SVM):
             return self.set_arg_svm(idx, vle)
+        elif isinstance(vle, Sampler):
+            arg_value = cl.ffi.new("const void *", vle.sampler)
+            arg_size = cl.ffi.sizeof("sampler_t")
         else:
             raise ValueError("vle should be of type Buffer, Image, Pipe, SVM, "
                              "numpy array, cffi pointer or None "
@@ -2217,6 +2341,51 @@ class Context(CL):
         super(Context, self).__init__()
         self._n_refs = 1
 
+    def _get_context_info(self, code, buf):
+        sz = cl.ffi.new("size_t *")
+        getbytes = cl.ffi.sizeof(buf) if buf else 0  # TODO: change others to use this
+        err = self._lib.clGetContextInfo(self.handle, code,
+                                         getbytes, buf, sz)
+        self.check_error(err, "clGetContextInfo")
+        return sz[0]
+
+    @property
+    def devices(self):
+        """
+        List of Device object associated with this context.
+        """
+        try:
+            return self._devices
+        except AttributeError:
+            sz_ids = self._get_context_info( cl.CL_CONTEXT_DEVICES, cl.ffi.NULL )
+            ids = cl.ffi.new( "cl_device_id[]", sz_ids )
+            sz_ret = self._get_context_info( cl.CL_CONTEXT_DEVICES, ids )
+            assert sz_ret == sz_ids
+            self._devices = [ Device(i) for i in ids ]
+            return self._devices
+
+    @property
+    def platform(self):
+        """
+        Platform object associated with this context.
+        """
+        try:
+            return self._platform
+        except AttributeError:
+            self._platform = self.devices[0].platform
+            assert all([ dev.platform == self._platform for dev in self.devices ])
+            return self._platform
+
+
+
+    @classmethod
+    def from_cl_id(cls, context_id):
+        self = cls.__new__(cls)
+        self._init_empty()
+        self._handle = context_id
+        devs = self.devices         # populate device list
+
+
     @classmethod
     def from_current_gl_context(cls, platform=None):       #TODO: add multi-device support
         if platform is None:
@@ -2232,15 +2401,15 @@ class Context(CL):
                 raise CLRuntimeError( "Could not find CL platform corresponding to current GL context" )
 
 
-        self = cls.__new__(cls)
-        self._init_empty()
-        err = cl.ffi.new("cl_int *")
-
         if isinstance(platform, Platform):
             cl_platform = platform.handle
         else:
             cl_platform = platform
             platform = Platform(cl_platform)
+
+        self = cls.__new__(cls)
+        self._init_empty()
+        err = cl.ffi.new("cl_int *")
 
         platform_props = (cl.CL_CONTEXT_PLATFORM, cl_platform) if cl_platform else ()
 
@@ -2334,19 +2503,6 @@ class Context(CL):
         if n_refs <= 0:
             self._release()
 
-    @property
-    def platform(self):
-        """
-        Platform object associated with this context.
-        """
-        return self._platform
-
-    @property
-    def devices(self):
-        """
-        List of Device object associated with this context.
-        """
-        return self._devices
 
     def get_supported_image_formats(self, flags=cl.CL_MEM_READ_ONLY, image_type=cl.CL_MEM_OBJECT_IMAGE2D):
         n_fmts = cl.ffi.new("cl_uint*")
@@ -2529,6 +2685,8 @@ class Context(CL):
         """
         return SVM(self, flags, size, alignment)
 
+    def create_sampler(self, normalized_coords, addressing_mode, filter_mode):
+        return Sampler(self, normalized_coords, addressing_mode, filter_mode)
 
     def _release(self):
         if self.handle is not None:

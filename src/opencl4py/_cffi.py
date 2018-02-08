@@ -362,32 +362,38 @@ cl_int clWaitForEvents(     cl_uint                   num_events,
 
 cl_int clReleaseEvent(cl_event event);
 
-cl_int clFlush(cl_command_queue command_queue);
 
-cl_int clFinish(cl_command_queue command_queue);
+cl_int clEnqueueMarker (    cl_command_queue          command_queue,
+ 	                        cl_event *                event );
 
-cl_int clEnqueueNDRangeKernel(cl_command_queue command_queue,
-                              cl_kernel kernel,
-                              cl_uint work_dim,
-                              const size_t *global_work_offset,
-                              const size_t *global_work_size,
-                              const size_t *local_work_size,
-                              cl_uint num_events_in_wait_list,
-                              const cl_event *event_wait_list,
-                              cl_event *event);
+cl_int clEnqueueBarrier(    cl_command_queue        command_queue);
 
-cl_int clGetEventProfilingInfo(cl_event event,
-                               cl_profiling_info param_name,
-                               size_t param_value_size,
-                               void *param_value,
-                               size_t *param_value_size_ret);
+cl_int clFlush(             cl_command_queue        command_queue);
 
-cl_mem clCreatePipe(cl_context context,
-                    cl_mem_flags flags,
-                    cl_uint pipe_packet_size,
-                    cl_uint pipe_max_packets,
-                    const cl_pipe_properties *properties,
-                    cl_int *errcode_ret);
+cl_int clFinish(            cl_command_queue        command_queue);
+
+cl_int clEnqueueNDRangeKernel(cl_command_queue        command_queue,
+                              cl_kernel               kernel,
+                              cl_uint                 work_dim,
+                              const size_t *          global_work_offset,
+                              const size_t *          global_work_size,
+                              const size_t *          local_work_size,
+                              cl_uint                 num_events_in_wait_list,
+                              const cl_event *        event_wait_list,
+                              cl_event *              event );
+
+cl_int clGetEventProfilingInfo(cl_event               event,
+                               cl_profiling_info      param_name,
+                               size_t                 param_value_size,
+                               void *                 param_value,
+                               size_t *               param_value_size_ret );
+
+cl_mem clCreatePipe(           cl_context             context,
+                                cl_mem_flags          flags,
+                                cl_uint               pipe_packet_size,
+                                cl_uint               pipe_max_packets,
+                                const cl_pipe_properties * properties,
+                                cl_int *              errcode_ret );
 
 cl_int clGetPipeInfo(cl_mem    pipe,
               cl_pipe_info     param_name,
