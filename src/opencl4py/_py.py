@@ -632,8 +632,8 @@ class Queue(CL):
                 int(row_pitch[0]), int(slice_pitch[0]))
 
 
-    def map_buffer(self, buf, flags=cl.CL_MEM_READ_WRITE, size=None, blocking=True, offset=0,
-                   wait_for=None, need_event=False):
+    def map_buffer(self, buf, flags=cl.CL_MEM_READ_WRITE, size=None, offset=0,
+                   blocking=True, wait_for=None, need_event=False):
         """Maps buffer.
 
         Parameters:
