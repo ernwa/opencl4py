@@ -1592,9 +1592,9 @@ class Image(CL, MemObject):
 
     FORMAT_DTYPE_MAP = {
 		cl.CL_UNORM_SHORT_565:  '>u2',  cl.CL_UNORM_SHORT_555:    '>u2',
-		cl.CL_UNORM_INT_101010: '>u4',  cl.CL_UNORM_INT_101010_2: '>u4',         # TODO: are packed formats big-endian?
+		cl.CL_UNORM_INT_101010: '>u4',  cl.CL_UNORM_INT_101010_2: '>u4',         # FIXME: are packed formats big-endian?
 		cl.CL_SNORM_INT8:        'i2',  cl.CL_SNORM_INT16:         'i2',
-        cl.CL_UNORM_INT8:        'i1',  cl.CL_UNORM_INT16:         'i2',
+        cl.CL_UNORM_INT8:        'u1',  cl.CL_UNORM_INT16:         'u2',
         cl.CL_HALF_FLOAT:        'f2',  cl.CL_FLOAT:               'f4',
 		cl.CL_SIGNED_INT8:   'i1', cl.CL_SIGNED_INT16:   'i2', cl.CL_SIGNED_INT32:   'i4',
 		cl.CL_UNSIGNED_INT8: 'u1', cl.CL_UNSIGNED_INT16: 'u2', cl.CL_UNSIGNED_INT32: 'u4'
@@ -1640,7 +1640,7 @@ class Image(CL, MemObject):
 
     @property
     def shape(self):
-        raw_shape = (self.depth, self.width, self.height)
+        raw_shape = (self.depth, self.height, self.width)
         return tuple( s for s in raw_shape if s > 1 )
 
 
