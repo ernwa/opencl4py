@@ -78,11 +78,11 @@ def register_extension(name, c_prototypes):
     cl.extensions[name] = c_prototypes
     cl.cdef(c_prototypes)
 
-def check_error(err, funcname):
+def check_error(err, funcname, extra_info=''):
     if err:
         raise CLRuntimeError(
-            "%s() failed with error %s" %
-            ( funcname, CL.get_error_description(err)), err )
+            "%s() failed with error %s%s" %
+            ( funcname, CL.get_error_description(err), extra_info), err )
 
 def get_wait_list( wait_for ):
     """Returns cffi event list and number of events
@@ -176,14 +176,14 @@ class CL(object):
         self._handle = None
         self.from_gl = False
 
-    def check_error(self, err, funcname):
+    def check_error(self, err, funcname, extra_info=''):
         if err:
             if hasattr(self, "_handle"):
                 self._handle = None
 #                self._del_ref(self)     # shouldn't these both be here
             raise CLRuntimeError(
-                "%s() failed with error %s" %
-                ( funcname, CL.get_error_description(err)), err )
+                "%s() failed with error %s%s" %
+                ( funcname, CL.get_error_description(err), extra_info), err )
 
 
     def __eq__(self, other):
@@ -579,7 +579,7 @@ class Queue(CL):
 
 
     def map_image(self, image, flags, region=None,
-                   blocking=True, origin=None,
+                   origin=None, blocking=True,
                    wait_for=None, need_event=False):
         """Maps image.
 
@@ -688,8 +688,8 @@ class Queue(CL):
     unmap_image = unmap
 
 
-    def read_buffer(self, buf, host_array, blocking=True, size=None, offset=0,
-                    wait_for=None, need_event=False):
+    def read_buffer(self, buf, host_array, size=None, offset=0,
+                    blocking=True, wait_for=None, need_event=False):
         """Copies from device buffer to host buffer.
 
         Parameters:
@@ -714,10 +714,9 @@ class Queue(CL):
         return Event(event[0]) if event != cl.ffi.NULL else None
 
 
-    def read_image(self, image, host_array, blocking=True,
-                  region=None, origin=(0,0),
+    def read_image(self, image, host_array, region=None, origin=(0,0),
                   src_row_pitch=0, src_slice_pitch=0,
-                   wait_for=None, need_event=False):
+                   blocking=True, wait_for=None, need_event=False):
         """Copies from device image to host buffer.
 
         Parameters:
@@ -759,8 +758,8 @@ class Queue(CL):
         return None if event == cl.ffi.NULL else Event(event[0])
 
 
-    def write_buffer(self, buf, host_array, blocking=True, size=None, offset=0,
-                     wait_for=None, need_event=False):
+    def write_buffer(self, buf, host_array, size=None, offset=0,
+                     blocking=True, wait_for=None, need_event=False):
         """Copies from host buffer to device buffer.
 
         Parameters:
@@ -785,10 +784,10 @@ class Queue(CL):
         return Event(event[0]) if event != cl.ffi.NULL else None
 
 
-    def write_image(self, image, host_array, blocking=True,
+    def write_image(self, image, host_array,
                    region=None, origin=(0,0),
                    src_row_pitch=0, src_slice_pitch=0,
-                   wait_for=None, need_event=False):
+                   blocking=True, wait_for=None, need_event=False):
         """Copies from host buffer to device image.
 
         Parameters:
@@ -1663,15 +1662,15 @@ class Image(CL, MemObject):
         self._host_array = (host_array if flags & cl.CL_MEM_USE_HOST_PTR != 0 else None)
         host_ptr = CL.extract_ptr(host_array)
 
-#        print cl.ffi
         self.image_format = ensure_type("cl_image_format *", image_format)
-#        self.image_format = cl.ffi.new("cl_image_format*", image_format)
         self.image_desc = ensure_type("cl_image_desc *", image_desc)   # will the cast of buffer/mem_object work?
+
         err = cl.ffi.new("cl_int *")
         self._handle = self._lib.clCreateImage(
                             context.handle, flags,
                             self.image_format, self.image_desc, host_ptr, err)
         self.check_error(err[0], 'clCreateImage')
+
         self.from_gl = False
 
 
@@ -2009,7 +2008,7 @@ class Kernel(CL):
                              "numpy array, cffi pointer or None "
                              "in Kernel::set_arg()")
         n = self._lib.clSetKernelArg(self.handle, idx, arg_size, arg_value)
-        self.check_error(n, "clSetKernelArg")
+        self.check_error(n, "clSetKernelArg", " for argument %d" % idx)
 
     def set_arg_svm(self, idx, svm_ptr):
         """Sets SVM pointer as the kernel argument.
