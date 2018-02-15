@@ -2573,7 +2573,7 @@ class Context(CL):
 
             self.check_error(status, "clGetGLContextInfoKHR")
             assert size_ret[0] == sizeof_device_id
-
+            print('got result', cl_device_id, ', calling create_context')
             self._handle = self._lib.clCreateContext(
                 gl_ctx_props, 1, cl_device_id, cl.ffi.NULL, cl.ffi.NULL, err)
             self.check_error(err[0], "clCreateContext")
