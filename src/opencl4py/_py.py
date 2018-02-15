@@ -2505,13 +2505,14 @@ class Context(CL):
             for platform in Platforms.get_ids():
                 try:
                     return Context.from_current_gl_context(platform)
-                except CLRuntimeError as error:
-                    errmsg, errcode = error.args
-                    print(platform, errcode, errmsg)
-                    if errcode != cl.CL_INVALID_GL_SHAREGROUP_REFERENCE_KHR:
-                        raise
+                except RuntimeError:
+                    pass
             else:
-                raise CLRuntimeError( "Could not find CL platform corresponding to current GL context" )
+                raise RuntimeError( "Could not find any platform able to use current GL context" )
+
+        if not 'cl_khr_gl_sharing' in platform.extensions:
+            raise RuntimeError('Platform "%s" does not support the "cl_khr_gl_sharing" extension', platform.name)
+
 
         if isinstance(platform, Platform):
             cl_platform = platform.handle
