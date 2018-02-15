@@ -2510,15 +2510,14 @@ class Context(CL):
             else:
                 raise RuntimeError( "Could not find any platform able to use current GL context" )
 
-        if not 'cl_khr_gl_sharing' in platform.extensions:
-            raise RuntimeError('Platform "%s" does not support the "cl_khr_gl_sharing" extension', platform.name)
-
-
         if isinstance(platform, Platform):
             cl_platform = platform.handle
         else:
             cl_platform = platform
             platform = Platform(cl_platform)
+
+        if not 'cl_khr_gl_sharing' in platform.extensions:
+            raise RuntimeError('Platform "%s" does not support the "cl_khr_gl_sharing" extension', platform.name)
 
         self = cls.__new__(cls)
         self._init_empty()
