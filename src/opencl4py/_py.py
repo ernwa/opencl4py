@@ -2516,7 +2516,7 @@ class Context(CL):
             cl_platform = platform
             platform = Platform(cl_platform)
 
-        if not 'cl_khr_gl_sharing' in platform.extensions:
+        if 'cl_khr_gl_sharing' not in platform.extensions:  # platform can return
             raise RuntimeError('Platform "%s" does not support the "cl_khr_gl_sharing" extension', platform.name)
 
         self = cls.__new__(cls)
@@ -2558,22 +2558,22 @@ class Context(CL):
                     cl.CL_GLX_DISPLAY_KHR,  self._gllib.glXGetCurrentDisplay(),
                     *platform_props )
 
-            print('getting clGetGLContextInfoKHR function')
             clGetGLContextInfoKHR = platform.get_extension_function("clGetGLContextInfoKHR")
+
             if clGetGLContextInfoKHR == cl.ffi.NULL:
                 raise RuntimeError( 'platform %s does not provide clGetGLContextInfoKHR!' % platform.name )
-            print(clGetGLContextInfoKHR)
+
             sizeof_device_id = cl.ffi.sizeof("cl_device_id")
             cl_device_id = cl.ffi.new("cl_device_id *")
             size_ret = cl.ffi.new("size_t *")
-            print('calling it')
+
             status = clGetGLContextInfoKHR( gl_ctx_props,
                     cl.CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR,
                     sizeof_device_id, cl_device_id, size_ret)
 
             self.check_error(status, "clGetGLContextInfoKHR")
             assert size_ret[0] == sizeof_device_id
-            print('got result', cl_device_id, ', calling create_context')
+
             self._handle = self._lib.clCreateContext(
                 gl_ctx_props, 1, cl_device_id, cl.ffi.NULL, cl.ffi.NULL, err)
             self.check_error(err[0], "clCreateContext")
