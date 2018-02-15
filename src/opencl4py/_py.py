@@ -63,7 +63,40 @@ def ensure_type(typespec, obj, cast=False):
 
 
 def typeof_function(ffi, name):   # without function needing to be in lib
-    return ffi._parser._declarations['function ' + name][0]
+    with ffi._lock:
+        tp, _ = ffi._parser._declarations['function ' + name]
+        BType = ffi._get_cached_btype(tp)
+    return BType
+
+def declared_types(ffi, typename='function'):
+    return [k for k in ffi._parser_declarations if typename in k]
+
+
+class Extensions(object):
+    def __init__(self, ffi):
+        self.ffi = ffi
+        self.extension = {}
+        self.functions = {}
+
+    def __getattr__(self, funcname):
+        return self.functions[funcname]
+
+    def register(self, extension_name, extension_source):
+        with cl.lock:
+            prev_declared = set(declared_types(self.ffi))
+            self.ffi.cdef(extension_source)
+            newly_declared = set(declared_types(self.ffi)) - prev_declared
+
+        declared_funcs = [ n.split()[1] for n in newly_declared ]   # remove "function"
+
+        self.source[extension_name] = (declared_funcs, extension_source)
+        for nf in declared_funcs:
+            print( nf )
+#            self.functions[nf] = 
+
+
+
+
 
 
 def lookup_const(name):
@@ -78,11 +111,13 @@ def register_extension(name, c_prototypes):
     cl.extensions[name] = c_prototypes
     cl.cdef(c_prototypes)
 
+
 def check_error(err, funcname, extra_info=''):
     if err:
         raise CLRuntimeError(
             "%s() failed with error %s%s" %
             ( funcname, CL.get_error_description(err), extra_info), err )
+
 
 def get_wait_list( wait_for ):
     """Returns cffi event list and number of events
@@ -96,6 +131,7 @@ def get_wait_list( wait_for ):
         wait_list = cl.ffi.NULL
     return (wait_list, n_events)
 
+
 def wait_for_events( events, lib=None ):
     """Wait on list of Event objects.
     """
@@ -103,6 +139,7 @@ def wait_for_events( events, lib=None ):
     wait_list, n_events = get_wait_list(events)
     n = lib.clWaitForEvents(n_events, wait_list)
     check_error(n, 'clWaitForEvents')
+
 
 class CLRuntimeError(RuntimeError):
     def __init__(self, msg, code):
@@ -150,14 +187,17 @@ class CL(object):
     CHANNEL_ORDERS = name_lookup_table(
         "CL_R", "CL_A", "CL_RG", "CL_RA", "CL_RGB", "CL_RGBA", "CL_BGRA", "CL_ARGB",
         "CL_INTENSITY", "CL_LUMINANCE", "CL_Rx", "CL_RGx", "CL_RGBx", "CL_DEPTH",
-        "CL_DEPTH_STENCIL", "CL_sRGB", "CL_sRGBx", "CL_sRGBA", "CL_sBGRA", "CL_ABGR" )
+        "CL_DEPTH_STENCIL", "CL_sRGB", "CL_sRGBx", "CL_sRGBA", "CL_sBGRA", "CL_ABGR",
+        "CL_NV21_IMG", "CL_YV12_IMG", "CL_1RGB_APPLE", "CL_BGR1_APPLE",
+        "CL_YCbYCr_APPLE", "CL_CbYCrY_APPLE", "CL_ABGR_APPLE" )
 
     CHANNEL_TYPES = name_lookup_table(
         "CL_SNORM_INT8", "CL_SNORM_INT16", "CL_UNORM_INT8", "CL_UNORM_INT16",
         "CL_UNORM_SHORT_565", "CL_UNORM_SHORT_555", "CL_UNORM_INT_101010",
         "CL_SIGNED_INT8", "CL_SIGNED_INT16", "CL_SIGNED_INT32",
         "CL_UNSIGNED_INT8", "CL_UNSIGNED_INT16", "CL_UNSIGNED_INT32",
-        "CL_HALF_FLOAT", "CL_FLOAT","CL_UNORM_INT24", "CL_UNORM_INT_101010_2" )
+        "CL_HALF_FLOAT", "CL_FLOAT","CL_UNORM_INT24", "CL_UNORM_INT_101010_2",
+        "CL_SFIXED14_APPLE", "CL_BIASED_HALF_APPLE" )
 
     GL_OBJECT_TYPES = name_lookup_table(
         "CL_GL_OBJECT_BUFFER", "CL_GL_OBJECT_TEXTURE2D",
@@ -2519,7 +2559,8 @@ class Context(CL):
                     *platform_props )
 
             clGetGLContextInfoKHR = platform.get_extension_function("clGetGLContextInfoKHR")
-
+            if clGetGLContextInfoKHR == cl.ffi.NULL:
+                raise RuntimeError( 'platform %s does not provide clGetGLContextInfoKHR!' % platform.name )
 
             sizeof_device_id = cl.ffi.sizeof("cl_device_id")
             cl_device_id = cl.ffi.new("cl_device_id *")
@@ -2549,6 +2590,11 @@ class Context(CL):
         self._platform = platform
         devices = [ dev if not isinstance(dev, int) else
                           platform.devices[dev] for dev in devices]
+        if len(devices) == 0:
+            if len(platform.devices) == 1:
+                devices = platform.devices
+            else:
+                raise ValueError('Context can only be created without device list if platform has one device')
         self._devices = devices
 
         plist = [cl.CL_CONTEXT_PLATFORM, platform.handle] + properties
@@ -3266,7 +3312,7 @@ class Platform(CL):
         return iter(self.devices)
 
 
-    def create_context(self, devices):
+    def create_context(self, devices=[]):
         """Creates OpenCL context on this platform and selected devices.
 
         Parameters:

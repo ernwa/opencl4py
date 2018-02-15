@@ -45,6 +45,7 @@ ffi = None
 #: Loaded shared library
 lib = None
 gllib = None
+
 #: Lock
 lock = threading.Lock()
 
@@ -739,7 +740,8 @@ def initialize(
 
     with lock:
         if ffi:
-            print( '<opencl4py> reinitializing ffi. Things may not work right.' )
+            return # reinitializing never seems to be desirable.
+#            print( '<opencl4py> reinitializing ffi. Things may not work right.' )
         ffi = cffi.FFI()
         ffi.cdef(clsrc)
 

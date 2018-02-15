@@ -320,6 +320,16 @@ CL_sRGBA                                     = 0x10C1
 CL_sBGRA                                     = 0x10C2
 CL_ABGR                                      = 0x10C3
 
+CL_NV21_IMG                                  = 0x40D0    # cl_img_yuv_image extension
+CL_YV12_IMG                                  = 0x40D1
+
+# apple-specific channel orders
+CL_1RGB_APPLE                                = 0x10000006 # alpha reads as 0 outside image
+CL_BGR1_APPLE                                = 0x10000007
+CL_YCbYCr_APPLE                              = 0x10000010 # special apple YUV IoSurface formats
+CL_CbYCrY_APPLE                              = 0x10000011
+CL_ABGR_APPLE                                = 0x10000012 # apple CoreImage CL-GL sharing type
+
 #  cl_channel_type
 CL_SNORM_INT8                                = 0x10D0
 CL_SNORM_INT16                               = 0x10D1
@@ -339,8 +349,9 @@ CL_FLOAT                                     = 0x10DE
 CL_UNORM_INT24                               = 0x10DF
 CL_UNORM_INT_101010_2                        = 0x10E0
 
-CL_NV21_IMG                                  = 0x40D0    # cl_img_yuv_image extension
-CL_YV12_IMG                                  = 0x40D1
+# apple-specific image channel types
+CL_SFIXED14_APPLE                            = 0x10000008 # special apple CPU-only fixed-point formats
+CL_BIASED_HALF_APPLE                         = 0x10000009
 
 #  cl_mem_object_type
 CL_MEM_OBJECT_BUFFER                         = 0x10F0

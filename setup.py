@@ -45,10 +45,10 @@ except ImportError:
 setup(
     name="opencl4py",
     description="OpenCL cffi bindings and helper classes",
-    version="2.1",
+    version="2.2",
     license="Simplified BSD",
-    author="Samsung Electronics Co.,Ltd.",
-    author_email="a.kazantsev@samsung.com",
+    author="Samsung Electronics Co.,Ltd., Andrea Waite",
+    author_email="a.kazantsev@samsung.com, lovebrub@gmail.com",
     url="https://github.com/Samsung/opencl4py",
     download_url="https://github.com/Samsung/opencl4py",
     packages=["opencl4py", "opencl4py.blas"],
