@@ -92,7 +92,7 @@ class Extensions(object):
         self.source[extension_name] = (declared_funcs, extension_source)
         for nf in declared_funcs:
             print( nf )
-#            self.functions[nf] = 
+#            self.functions[nf] =
 
 
 
@@ -2558,14 +2558,15 @@ class Context(CL):
                     cl.CL_GLX_DISPLAY_KHR,  self._gllib.glXGetCurrentDisplay(),
                     *platform_props )
 
+            print('getting clGetGLContextInfoKHR function')
             clGetGLContextInfoKHR = platform.get_extension_function("clGetGLContextInfoKHR")
             if clGetGLContextInfoKHR == cl.ffi.NULL:
                 raise RuntimeError( 'platform %s does not provide clGetGLContextInfoKHR!' % platform.name )
-
+            print(clGetGLContextInfoKHR)
             sizeof_device_id = cl.ffi.sizeof("cl_device_id")
             cl_device_id = cl.ffi.new("cl_device_id *")
             size_ret = cl.ffi.new("size_t *")
-
+            print('calling it')
             status = clGetGLContextInfoKHR( gl_ctx_props,
                     cl.CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR,
                     sizeof_device_id, cl_device_id, size_ret)
@@ -3375,6 +3376,38 @@ class Platforms(CL):
                     device.memalign, device.version_string.strip()))
         return "\n".join(lines)
 
+    def create_context_from_string(self, ctx):
+        assert isinstance(ctx, basestring)
+        idx = ctx.find(":")
+        if idx >= 0:
+            try:
+                platform_number = int(ctx[:idx]) if len(ctx[:idx]) else 0
+            except ValueError:
+                raise ValueError("Incorrect platform number")
+            ctx = ctx[idx + 1:]
+        else:
+            platform_number = 0
+        device_strings = ctx.split(",")
+        device_numbers = []
+        try:
+            for s in device_strings:
+                device_numbers.append(int(s) if len(s) else 0)
+        except ValueError:
+            raise ValueError("Incorrect device number")
+        try:
+            platform = self.platforms[platform_number]
+        except IndexError:
+            raise IndexError("Platform index is out of range")
+        devices = []
+        try:
+            for i in device_numbers:
+                devices.append(platform.devices[i])
+        except IndexError:
+            raise IndexError("Device index is out of range")
+        return platform.create_context(devices)
+
+
+
     def create_some_context(self):
         """Returns Context object with some OpenCL platform, devices attached.
 
@@ -3410,30 +3443,4 @@ class Platforms(CL):
                 ctx = sys.stdin.readline().strip()
             else:
                 ctx = ""
-        idx = ctx.find(":")
-        if idx >= 0:
-            try:
-                platform_number = int(ctx[:idx]) if len(ctx[:idx]) else 0
-            except ValueError:
-                raise ValueError("Incorrect platform number")
-            ctx = ctx[idx + 1:]
-        else:
-            platform_number = 0
-        device_strings = ctx.split(",")
-        device_numbers = []
-        try:
-            for s in device_strings:
-                device_numbers.append(int(s) if len(s) else 0)
-        except ValueError:
-            raise ValueError("Incorrect device number")
-        try:
-            platform = self.platforms[platform_number]
-        except IndexError:
-            raise IndexError("Platform index is out of range")
-        devices = []
-        try:
-            for i in device_numbers:
-                devices.append(platform.devices[i])
-        except IndexError:
-            raise IndexError("Device index is out of range")
-        return platform.create_context(devices)
+        return self.create_context_from_string(ctx)
