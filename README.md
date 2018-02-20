@@ -5,20 +5,19 @@ opencl4py2
 
 _Why?_
 
-Pyopencl is the de facto standard python bindings for OpenCL, but in the course of my research on real-time infrared projector systems I decided that it was lacking in certain essential features. The author seems to focus on complex and leaky high-level abstractions at the expense of reliable and intuitive access to the underlying OpenCL layer, and the interface code is compiled C++, which makes it hard to tinker with.
+Pyopencl is the de facto standard python bindings for OpenCL, but in the course of my research I decided lacked certain essential features. The author seems to focus on high-level abstractions at the expense of reliable and intuitive access to the underlying OpenCL layer, and the interface code is compiled C++, which makes it hard to tinker with.
 
-When I found opencl4py, I thought it would be the answer. A minimalist set of classes wrapping cffi bindings were the perfect architecture for research work. One important feature is that names and parameter orders mostly align intuitively with the OpenCL C documentation, which is really important for figuring out errors in CL code.
-
-Unfortunately the original opencl4py is very lacking in completeness. It has no support for cl_image types, nor for cl/gl sharing, nor even barriers, so I added these things. Now that it's doing pretty much everything I need, it's time to share.
+When I found opencl4py, I thought it would be the answer. A minimalist set of classes wrapping cffi bindings are the perfect architecture for research work, while names and parameter orders mostly align with the OpenCL C documentation, an essential feature for debugging. Unfortunately the original opencl4py is very lacking in completeness. It has no support for image types, nor for cl/gl sharing, nor even barriers, so I added these things. Now that it's doing pretty much everything I need, it's time to share.
 
 
 _Features Supported:_
 
 This version has been extensively used on both Linux and MacOSX with Python 2.7. It supports:
 
-- Buffer
+- Buffer & SubBuffer
 - Image & Sampler
-- Pipe & SVM (I haven't tested these)
+- Pipe & SVM (I haven't personally tested these)
+- Mapping and reading
 - creating Context from OpenGL context
 - creating Buffer & Image from OpenGL objects
 
