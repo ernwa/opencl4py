@@ -3,14 +3,16 @@ opencl4py2
 
 **Minimalist OpenCL for python based on opencl4py**
 
-_Why?_
+Why?
+----
 
 Pyopencl is the de facto standard python bindings for OpenCL, but in the course of my research I decided lacked certain essential features. The author seems to focus on high-level abstractions at the expense of reliable and intuitive access to the underlying OpenCL layer, and the interface code is compiled C++, which makes it hard to tinker with.
 
 When I found opencl4py, I thought it would be the answer. A minimalist set of classes wrapping cffi bindings are the perfect architecture for research work, while names and parameter orders mostly align with the OpenCL C documentation, an essential feature for debugging. Unfortunately the original opencl4py is very lacking in completeness. It has no support for image types, nor for cl/gl sharing, nor even barriers, so I added these things. Now that it's doing pretty much everything I need, it's time to share.
 
 
-_Features Supported:_
+Features Supported
+------------------
 
 This version has been extensively used on both Linux and MacOSX with Python 2.7. It supports:
 
@@ -24,7 +26,8 @@ This version has been extensively used on both Linux and MacOSX with Python 2.7.
 Opencl4py itself was made to work for Python 3.3, Python 3.4 and PyPy as well as on Windows; I have not tested my additions on these platforms yet but it should work. GL/CL interop has been written to use WGL when Windows is present.
 
 
-_Installation:_
+Installation
+------------
 
 To install directly from github run:
 ```bash
@@ -48,7 +51,8 @@ for PyPy:
 PYTHONPATH=src pypy -m nose -w tests
 ```
 
-_Example:_
+Example
+-------
 
 ```python
 import opencl4py as cl
