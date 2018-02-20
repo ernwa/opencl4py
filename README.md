@@ -1,20 +1,36 @@
-opencl4py
-=========
+opencl4py2
+==========
 
-Python cffi OpenCL bindings and helper classes.
+**Minimalist OpenCL for python based on opencl4py**
 
-Tested with Python 2.7, Python 3.3, Python 3.4 and PyPy on Linux, MacOSX and Windows.
+_Why?_
 
-To use clBLAS, libclBLAS.so (clBLAS.dll) should be present.
+Pyopencl is the de facto standard python bindings for OpenCL, but in the course of my research on real-time infrared projector systems I decided that it was lacking in certain essential features. The author seems to focus on complex and leaky high-level abstractions at the expense of reliable and intuitive access to the underlying OpenCL layer, and the interface code is compiled C++, which makes it hard to tinker with.
 
-Not all OpenCL api is currently covered.
+When I found opencl4py, I thought it would be the answer. A minimalist set of classes wrapping cffi bindings were the perfect architecture for research work. One important feature is that names and parameter orders mostly align intuitively with the OpenCL C documentation, which is really important for figuring out errors in CL code.
 
-To install the module run:
+Unfortunately the original opencl4py is very lacking in completeness. It has no support for cl_image types, nor for cl/gl sharing, nor even barriers, so I added these things. Now that it's doing pretty much everything I need, it's time to share.
+
+
+_Features Supported:_
+
+This version has been extensively used on both Linux and MacOSX with Python 2.7. It supports:
+
+- Buffer
+- Image & Sampler
+- Pipe & SVM (I haven't tested these)
+- creating Context from OpenGL context
+- creating Buffer & Image from OpenGL objects
+
+Opencl4py itself was made to work for Python 3.3, Python 3.4 and PyPy as well as on Windows; I have not tested my additions on these platforms yet but it should work. GL/CL interop has been written to use WGL when Windows is present.
+
+
+_Installation:_
+
+To install directly from github run:
 ```bash
-pip install .
+pip install git+https://github.com/ernwa/opencl4py2
 ```
-or just copy src/opencl4py to any place where python
-interpreter will be able to find it.
 
 To run the tests, execute:
 
@@ -33,7 +49,7 @@ for PyPy:
 PYTHONPATH=src pypy -m nose -w tests
 ```
 
-Example usage:
+_Example:_
 
 ```python
 import opencl4py as cl
@@ -76,3 +92,4 @@ if __name__ == "__main__":
 
 Released under Simplified BSD License.
 Copyright (c) 2014, Samsung Electronics Co.,Ltd.
+improvements Copyright (c) 2017, Andrea Waite

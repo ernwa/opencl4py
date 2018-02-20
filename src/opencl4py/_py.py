@@ -1473,7 +1473,7 @@ class Buffer(CL, MemObject):
 
     def __init__(self, context, flags, host_array=None, size=None,
                  parent=None, origin=0):
-        self._init_empty(context, flags)
+        self._init_empty(context, flags, parent)
         self._host_array = (host_array if flags & cl.CL_MEM_USE_HOST_PTR
                             else None)
         host_ptr, size = CL.extract_ptr_and_size(host_array, size)
