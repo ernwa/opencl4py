@@ -54,7 +54,6 @@ def dtype_cl_type_name(dtype):
 
 
 def ensure_type(typespec, obj, cast=False):
-#    print cl.ffi
     if not isinstance(obj, cl.ffi.CData):  # cffi object
         return cl.ffi.new(typespec, obj)
     if cast:
@@ -216,11 +215,11 @@ class CL(object):
         self._handle = None
         self.from_gl = False
 
-    def check_error(self, err, funcname, extra_info=''):
+    def check_error(self, err, funcname, extra_info='', release=False):
         if err:
-            if hasattr(self, "_handle"):
+            if release and hasattr(self, "_handle"):
                 self._handle = None
-#                self._del_ref(self)     # shouldn't these both be here
+#                self._del_ref(self)     # shouldn't these both be here?q
             raise CLRuntimeError(
                 "%s() failed with error %s%s" %
                 ( funcname, CL.get_error_description(err), extra_info), err )
@@ -315,7 +314,7 @@ class Sampler(CL):  # TODO: test, implement clCreateSamplerWithProperties
                                         addressing_mode,
                                         filter_mode,
                                         errcode_ret )
-        self.check_error(errcode_ret, 'clCreateSampler')
+        self.check_error(errcode_ret, 'clCreateSampler', release=True)
 
     def retain(self):
         errcode = self.lib.clRetainSampler( self.sampler )
@@ -528,15 +527,15 @@ class Queue(CL):
                     props[i * 2 + 1] = kv[1]
             self._handle = self._lib.clCreateCommandQueueWithProperties(
                 context.handle, device.handle, props, err)
-        self.check_error(err[0], fnme)
+        self.check_error(err[0], fnme, release=True)
 
 
     @classmethod
     def from_cl_queue(cls, queue_id):
         self = cls.__new__(cls)
         self._init_empty()
-        self._handle = queue_id
         assert self.device         # populate device list
+        self._handle = queue_id
 
     def _get_command_queue_info(self, code, buf):
         sz = cl.ffi.new("size_t *")
@@ -611,10 +610,12 @@ class Queue(CL):
             global_work_offset = cl.ffi.new("size_t[]", list(global_offset))
 
         n = self._lib.clEnqueueNDRangeKernel(
-                self.handle, kernel.handle, n_dims, global_work_offset,
-                global_work_size, local_work_size, n_events, wait_list, event)
+                self.handle, kernel.handle,
+                n_dims, global_work_offset, global_work_size, local_work_size,
+                n_events, wait_list, event)
 
         self.check_error(n, "clEnqueueNDRangeKernel")
+
         return Event(event[0]) if event != cl.ffi.NULL else None
 
 
@@ -1476,8 +1477,6 @@ class Buffer(CL, MemObject):
         self._host_array = (host_array if flags & cl.CL_MEM_USE_HOST_PTR
                             else None)
         host_ptr, size = CL.extract_ptr_and_size(host_array, size)
-        # if host_array is not None:
-        #     print size, host_array.dtype, host_array.nbytes
         self._size = size
         self._origin = origin
         err = cl.ffi.new("cl_int *")
@@ -1493,7 +1492,7 @@ class Buffer(CL, MemObject):
                             parent.handle, flags, cl.CL_BUFFER_CREATE_TYPE_REGION,
                             info, err)
 
-        self.check_error(err[0], 'clCreateBuffer')
+        self.check_error(err[0], 'clCreateBuffer', release=True)
 
 
     @classmethod
@@ -1517,7 +1516,7 @@ class Buffer(CL, MemObject):
         self._handle = self._lib.clCreateFromGLBuffer(
                             context.handle, flags, self._gl_buffer, err)
 
-        self.check_error(err[0], 'clCreateFromGLBuffer')
+        self.check_error(err[0], 'clCreateFromGLBuffer', release=True)
         return self
 
 
@@ -1709,7 +1708,7 @@ class Image(CL, MemObject):
         self._handle = self._lib.clCreateImage(
                             context.handle, flags,
                             self.image_format, self.image_desc, host_ptr, err)
-        self.check_error(err[0], 'clCreateImage')
+        self.check_error(err[0], 'clCreateImage', release=True)
 
         self.from_gl = False
 
@@ -1736,7 +1735,7 @@ class Image(CL, MemObject):
         self._handle = self._lib.clCreateFromGLRenderbuffer(
                             context.handle, flags, renderbuffer, err)
 
-        self.check_error(err[0], 'clCreateFromGLRenderbuffer')
+        self.check_error(err[0], 'clCreateFromGLRenderbuffer', release=True)
         self.from_gl = True
         return self
 
@@ -1765,7 +1764,7 @@ class Image(CL, MemObject):
                             context.handle, flags, texture_target,
                             miplevel, texture, err)
 
-        self.check_error(err[0], 'clCreateFromGLTexture')
+        self.check_error(err[0], 'clCreateFromGLTexture', release=True)
         self.from_gl = True
         return self
 
@@ -1972,7 +1971,7 @@ class Kernel(CL):
         err = cl.ffi.new("cl_int *")
         ss = cl.ffi.new("char[]", name.encode("utf-8"))
         self._handle = self._lib.clCreateKernel(program.handle, ss, err)
-        self.check_error(err[0], "clCreateKernel")
+        self.check_error(err[0], "clCreateKernel", release=True)
 #            self._handle = None
 
     @property
@@ -2241,7 +2240,7 @@ class Program(CL):
         self._handle = self._lib.clCreateProgramWithSource(
                             self.context.handle, 1, strings, cl.ffi.NULL, err)
         del srcptr
-        self.check_error(err[0], "clCreateProgramWithSource")
+        self.check_error(err[0], "clCreateProgramWithSource", release=True)
 
         options = self.options.decode("utf-8")
         for dirnme in self.include_dirs:
@@ -2258,13 +2257,13 @@ class Program(CL):
                                        options, cl.ffi.NULL, cl.ffi.NULL)
         del options
         self._get_build_logs(device_list)
-        if err:
-            raise CLRuntimeError(
-                "clBuildProgram() failed with error %s\n"
-                "Logs are:\n%s\nSource was:\n%s\n" %
-                (CL.get_error_description(err), "\n".join(self.build_logs),
-                 self.source.decode("utf-8")),
-                err)
+
+        logstr = "\nLogs are:\n%s\nSource was:\n%s\n" % (
+                    "\n".join(self.build_logs),
+                    self.source.decode("utf-8") )
+
+        self.check_error(err, 'clBuildProgram', logstr, release=True)
+
 
     def _create_program_from_binary(self, src):
         count = len(self.devices)
@@ -2301,7 +2300,7 @@ class Program(CL):
                                        self.options, cl.ffi.NULL, cl.ffi.NULL)
         del binaries_ref
         self._get_build_logs(device_list)
-        self.check_error(err, "clBuildProgram")
+        self.check_error(err, "clBuildProgram", release=True)
 
     def _release(self):
         if self.handle is not None:
@@ -2339,7 +2338,7 @@ class Pipe(CL):
         self._handle = self._lib.clCreatePipe(
                             context.handle, flags, packet_size, max_packets,
                             cl.ffi.NULL, err)
-        self.check_error(err[0], "clCreatePipe")
+        self.check_error(err[0], "clCreatePipe", release=True)
 
     @property
     def context(self):
@@ -2500,7 +2499,7 @@ class Context(CL):
 
 
     @classmethod
-    def from_current_gl_context(cls, platform=None):       #TODO: add multi-device support
+    def from_current_gl_context(cls, platform=None, egl=False):       #TODO: add multi-device support
         if platform is None:
             for platform in Platforms.get_ids():
                 try:
@@ -2534,7 +2533,7 @@ class Context(CL):
 
             self._handle = self._lib.clCreateContext(
                 plist, 0, cl.ffi.NULL, cl.ffi.NULL, cl.ffi.NULL, err)
-            self.check_error(err[0], "clCreateContext")
+            self.check_error(err[0], "clCreateContext", release=True)
 
             sizeof_device_id = cl.ffi.sizeof("cl_device_id")
             cl_device_id = cl.ffi.new("cl_device_id *")
@@ -2544,10 +2543,15 @@ class Context(CL):
                 self._handle, gl_context,
                 cl.CL_CGL_DEVICE_FOR_CURRENT_VIRTUAL_SCREEN_APPLE,
                 sizeof_device_id, cl_device_id, size_ret )
-            self.check_error(status, "clGetGLContextInfoAPPLE")
+            self.check_error(status, "clGetGLContextInfoAPPLE", release=True)
             assert size_ret[0] == sizeof_device_id, 'No devices found!'
         else:
-            if sys.platform in ('win32', 'cygwin'):
+            if egl:
+                gl_ctx_props = Context._properties_list(
+                    cl.CL_GL_CONTEXT_KHR,   self._gllib.eglGetCurrentContext(),
+                    cl.CL_EGL_DISPLAY_KHR,  self._gllib.eglGetCurrentDisplay(),
+                    *platform_props )
+            elif sys.platform in ('win32', 'cygwin'):
                 gl_ctx_props = Context._properties_list(
                     cl.CL_GL_CONTEXT_KHR,   self._gllib.wglGetCurrentContext(),
                     cl.CL_WGL_HDC_KHR,      self._gllib.wglGetCurrentDC(),
@@ -2561,7 +2565,9 @@ class Context(CL):
             clGetGLContextInfoKHR = platform.get_extension_function("clGetGLContextInfoKHR")
 
             if clGetGLContextInfoKHR == cl.ffi.NULL:
-                raise RuntimeError( 'platform %s does not provide clGetGLContextInfoKHR!' % platform.name )
+                raise CLRuntimeError(
+                    'platform %s does not provide clGetGLContextInfoKHR!' % platform.name,
+                    release=True )
 
             sizeof_device_id = cl.ffi.sizeof("cl_device_id")
             cl_device_id = cl.ffi.new("cl_device_id *")
@@ -2571,15 +2577,12 @@ class Context(CL):
                     cl.CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR,
                     sizeof_device_id, cl_device_id, size_ret)
 
-            self.check_error(status, "clGetGLContextInfoKHR")
+            self.check_error(status, "clGetGLContextInfoKHR", release=True)
             assert size_ret[0] == sizeof_device_id
 
             self._handle = self._lib.clCreateContext(
                 gl_ctx_props, 1, cl_device_id, cl.ffi.NULL, cl.ffi.NULL, err)
-            self.check_error(err[0], "clCreateContext")
-
-
-#        print "GL context's device ID is:", cl_device_id[0]
+            self.check_error(err[0], "clCreateContext", release=True)
 
         self._devices = [Device(cl_device_id[0])]
         self._platform = self._devices[0].platform
@@ -2611,7 +2614,7 @@ class Context(CL):
         self._handle = self._lib.clCreateContext(
                             new_ctx_props, n_devices, device_list,
                             cl.ffi.NULL, cl.ffi.NULL, err)
-        self.check_error(err[0], "clCreateContext")
+        self.check_error(err[0], "clCreateContext", release=True)
 
     def _add_ref(self, obj):
         self._n_refs += 1

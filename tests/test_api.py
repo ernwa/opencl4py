@@ -202,7 +202,7 @@ class Test(unittest.TestCase):
         except cl.CLRuntimeError as e:
             if dev.version >= 1.2:
                 raise
-            self.assertEqual(e.code, -30)
+            self.assertEqual(e.code, cl.CL_INVALID_VALUE)
         self.assertIsInstance(dev.extensions, list)
         for ext in dev.extensions:
             self.assertIsInstance(ext.encode("utf-8"), bytes)
@@ -221,7 +221,7 @@ class Test(unittest.TestCase):
         except cl.CLRuntimeError as e:
             if dev.version >= 2.0:
                 raise
-            self.assertEqual(e.code, -30)
+            self.assertEqual(e.code, cl.CL_INVALID_VALUE)
 
     def test_program_info(self):
         platforms = cl.Platforms()
@@ -237,7 +237,7 @@ class Test(unittest.TestCase):
         except cl.CLRuntimeError as e:
             if prg.devices[0].version >= 1.2:
                 raise
-            self.assertEqual(e.code, -30)
+            self.assertEqual(e.code, cl.CL_INVALID_VALUE)
         bins = prg.binaries
         self.assertEqual(len(bins), 1)
         self.assertIsInstance(bins[0], bytes)
@@ -251,9 +251,11 @@ class Test(unittest.TestCase):
         self.assertGreater(krn.reference_count, 0)
         self.assertEqual(krn.num_args, 3)
         try:
+            print krn.attributes
             self.assertEqual(krn.attributes, "vec_type_hint(float4)")
         except cl.CLRuntimeError as e:
-            self.assertEqual(e.code, -30)
+            print e.code
+            self.assertEqual(e.code, cl.CL_INVALID_VALUE)
 
     def test_binary(self):
         platforms = cl.Platforms()
@@ -275,10 +277,14 @@ class Test(unittest.TestCase):
         global_size = [12345]
         local_size = None
 
+        assert queue.handle
         krn.set_args(cl.skip(3))
+        assert queue.handle
         self.assertRaises(cl.CLRuntimeError,
                           queue.execute_kernel, krn, global_size, local_size)
+        assert queue.handle
         krn.set_args(cl.skip, cl.skip, cl.skip)
+        print queue.handle
         self.assertRaises(cl.CLRuntimeError,
                           queue.execute_kernel, krn, global_size, local_size)
         krn.set_args(cl.skip(1), cl.skip(1), cl.skip(1))
@@ -336,7 +342,7 @@ class Test(unittest.TestCase):
         # Get results back from the device by map_buffer
         ev, ptr = queue.map_buffer(a_, cl.CL_MAP_READ, a.nbytes)
         del ev
-        queue.unmap_buffer(a_, ptr).wait()
+        queue.unmap_buffer(a_, ptr, need_event=True).wait()
         self.assertLess(numpy.fabs(a - d).max(), 0.0001,
                         "Incorrect result after map_buffer")
 
@@ -353,15 +359,16 @@ class Test(unittest.TestCase):
             blocking=False, need_event=True)
         ev.wait()
         a[:] = a_copy[:]
-        ev = queue.unmap_buffer(a_, ptr)
+        ev = queue.unmap_buffer(a_, ptr, need_event=True)
 
         # Execute kernel
-        ev = queue.execute_kernel(krn, global_size, local_size, wait_for=(ev,))
+        ev = queue.execute_kernel(krn, global_size, local_size,
+                                   wait_for=(ev,), need_event=True)
         # Get results back from the device by map_buffer
         ev, ptr = queue.map_buffer(a_, cl.CL_MAP_READ, a.nbytes,
                                    wait_for=(ev,), need_event=True)
         ev.wait()
-        queue.unmap_buffer(a_, ptr).wait()
+        queue.unmap_buffer(a_, ptr, need_event=True).wait()
         self.assertLess(numpy.fabs(a - d).max(), 0.0001,
                         "Incorrect result after map_buffer")
 
@@ -369,12 +376,13 @@ class Test(unittest.TestCase):
         ev = queue.write_buffer(a_, a_copy, blocking=False, need_event=True)
 
         # Execute kernel
-        ev = queue.execute_kernel(krn, global_size, local_size, wait_for=(ev,))
+        ev = queue.execute_kernel(krn, global_size, local_size,
+                                   wait_for=(ev,), need_event=True)
         # Get results back from the device by map_buffer
         ev, ptr = queue.map_buffer(a_, cl.CL_MAP_READ, a.nbytes,
                                    wait_for=(ev,), need_event=True)
         ev.wait()
-        queue.unmap_buffer(a_, ptr).wait()
+        queue.unmap_buffer(a_, ptr, need_event=True).wait()
         self.assertLess(numpy.fabs(a - d).max(), 0.0001,
                         "Incorrect result after map_buffer")
 
@@ -436,7 +444,7 @@ class Test(unittest.TestCase):
         # Get results back from the device by map_buffer
         ev, ptr = queue.map_buffer(a_, cl.CL_MAP_READ, sz)
         del ev
-        queue.unmap_buffer(a_, ptr).wait()
+        queue.unmap_buffer(a_, ptr, need_event=True).wait()
         mx = 0
         for i, t in enumerate(d):
             mx = max(mx, math.fabs(a[i] - t))
@@ -457,15 +465,14 @@ class Test(unittest.TestCase):
             blocking=False, need_event=True)
         ev.wait()
         a[0:N] = a_copy[0:N]
-        ev = queue.unmap_buffer(a_, ptr)
-
+        ev = queue.unmap_buffer(a_, ptr, need_event=True)
         # Execute kernel
-        ev = queue.execute_kernel(krn, global_size, local_size, wait_for=(ev,))
+        ev = queue.execute_kernel(krn, global_size, local_size, wait_for=(ev,), need_event=True)
         # Get results back from the device by map_buffer
         ev, ptr = queue.map_buffer(a_, cl.CL_MAP_READ, sz,
                                    wait_for=(ev,), need_event=True)
         ev.wait()
-        queue.unmap_buffer(a_, ptr).wait()
+        queue.unmap_buffer(a_, ptr, need_event=True).wait()
         mx = 0
         for i, t in enumerate(d):
             mx = max(mx, math.fabs(a[i] - t))
@@ -476,12 +483,12 @@ class Test(unittest.TestCase):
                                 blocking=False, need_event=True)
 
         # Execute kernel
-        ev = queue.execute_kernel(krn, global_size, local_size, wait_for=(ev,))
+        ev = queue.execute_kernel(krn, global_size, local_size, wait_for=(ev,), need_event=True)
         # Get results back from the device by map_buffer
         ev, ptr = queue.map_buffer(a_, cl.CL_MAP_READ, sz,
                                    wait_for=(ev,), need_event=True)
         ev.wait()
-        queue.unmap_buffer(a_, ptr).wait()
+        queue.unmap_buffer(a_, ptr, need_event=True).wait()
         mx = 0
         for i, t in enumerate(d):
             mx = max(mx, math.fabs(a[i] - t))
@@ -517,7 +524,7 @@ class Test(unittest.TestCase):
         krn.set_arg(2, c[0:1])
 
         # Execute kernel
-        ev = queue.execute_kernel(krn, [a.size], None)
+        ev = queue.execute_kernel(krn, [a.size], None, need_event=True)
         ev.wait()
 
         try:
@@ -553,7 +560,7 @@ class Test(unittest.TestCase):
 
         # Copy some data from one buffer to another
         sz = a.itemsize
-        queue.copy_buffer(a_, b_, 1000 * sz, 2000 * sz, 3000 * sz).wait()
+        queue.copy_buffer(a_, b_, 1000 * sz, 2000 * sz, 3000 * sz, need_event=True).wait()
 
         queue.read_buffer(b_, c)
         diff = numpy.fabs(c[2000:5000] - a[1000:4000]).max()
@@ -584,7 +591,7 @@ class Test(unittest.TestCase):
         queue.copy_buffer_rect(
             a_, b_, (3 * sz, 4, 5), (6 * sz, 7, 8), (5 * sz, 10, 20),
             a.shape[2] * sz, a.shape[1] * a.shape[2] * sz,
-            b.shape[2] * sz, b.shape[1] * b.shape[2] * sz).wait()
+            b.shape[2] * sz, b.shape[1] * b.shape[2] * sz, need_event=True).wait()
 
         queue.read_buffer(b_, c)
         diff = numpy.fabs(c[8:28, 7:17, 6:11] - a[5:25, 4:14, 3:8]).max()
@@ -609,7 +616,7 @@ class Test(unittest.TestCase):
 
         # Fill the buffer
         pattern = numpy.array([1, 2, 3, 4], dtype=numpy.int32)
-        queue.fill_buffer(a_, pattern, pattern.nbytes, a.nbytes).wait()
+        queue.fill_buffer(a_, pattern, pattern.nbytes, a.nbytes, need_event=True).wait()
 
         queue.read_buffer(a_, a)
         diff = 0
@@ -652,7 +659,7 @@ class Test(unittest.TestCase):
         krn.set_arg(2, c_)
 
         # Execute kernel
-        queue.execute_kernel(krn, [a.size], None).wait()
+        queue.execute_kernel(krn, [a.size], None, need_event=True).wait()
 
         # Get results back
         d = numpy.zeros_like(a)
@@ -665,7 +672,7 @@ class Test(unittest.TestCase):
         krn.set_arg(2, None)
 
         # Execute kernel
-        queue.execute_kernel(krn, [a.size], None).wait()
+        queue.execute_kernel(krn, [a.size], None, need_event=True).wait()
 
         # Get results back
         queue.read_buffer(a_, d)
@@ -718,7 +725,7 @@ class Test(unittest.TestCase):
         # Get results back from the device by map_buffer
         ev, ptr = queue.map_buffer(a_, cl.CL_MAP_READ, a_.size)
         del ev
-        queue.unmap_buffer(a_, ptr).wait()
+        queue.unmap_buffer(a_, ptr, need_event=True).wait()
         self.assertLess(numpy.fabs(a[1024:1024 + 4096] - d).max(), 0.0001,
                         "Incorrect result after map_buffer")
 
@@ -828,14 +835,14 @@ class Test(unittest.TestCase):
         self.assertEqual(p[0], 3)
         # always ensure that the last unmap had completed before
         # the svm destructor
-        queue.svm_unmap(svm).wait()
+        queue.svm_unmap(svm, need_event=True).wait()
         try:
             import numpy
             a = numpy.frombuffer(svm.buffer, dtype=numpy.int32)
             queue.execute_kernel(krn, [1], None)
             queue.svm_map(svm, cl.CL_MAP_READ, 4)
             self.assertEqual(a[0], 4)
-            queue.svm_unmap(svm).wait()
+            queue.svm_unmap(svm, need_event=True).wait()
         except ImportError:
             pass
         del svm  # svm destructor here
@@ -855,7 +862,7 @@ class Test(unittest.TestCase):
         queue.svm_memcpy(a[n:], a, n * a.itemsize)
         queue.svm_map(svm, cl.CL_MAP_READ, svm.size)
         self.assertEqual(numpy.fabs(a[n:] - a[:n]).max(), 0)
-        queue.svm_unmap(svm).wait()
+        queue.svm_unmap(svm, need_event=True).wait()
         del svm
 
     def test_svm_memfill(self):
@@ -873,7 +880,7 @@ class Test(unittest.TestCase):
         for i in range(0, a.size, pattern.size):
             diff += numpy.fabs(a[i:i + pattern.size] - pattern).sum()
         self.assertEqual(diff, 0)
-        queue.svm_unmap(svm).wait()
+        queue.svm_unmap(svm, need_event=True).wait()
         del svm
 
 

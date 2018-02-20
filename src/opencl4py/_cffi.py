@@ -508,58 +508,58 @@ void * clEnqueueMapImage(cl_command_queue command_queue,
               cl_int * errcode_ret);
 
 cl_int clEnqueueReadImage(cl_command_queue command_queue,
-               cl_mem image,
-               cl_bool blocking_read,
-               const size_t * origin /* [3] */,
-               const size_t * region /* [3] */,
-               size_t row_pitch,
-               size_t slice_pitch,
-               void * ptr,
-               cl_uint num_events_in_wait_list,
-               const cl_event * event_wait_list,
-               cl_event * event);
+                    cl_mem                  image,
+                    cl_bool                 blocking_read,
+                    const size_t *          origin /* [3] */,
+                    const size_t *          region /* [3] */,
+                    size_t                  row_pitch,
+                    size_t                  slice_pitch,
+                    void *                  ptr,
+                    cl_uint                 num_events_in_wait_list,
+                    const cl_event *        event_wait_list,
+                    cl_event *              event);
 
 
 cl_int clEnqueueWriteImage(cl_command_queue command_queue,
-                cl_mem image,
-                cl_bool blocking_write,
-                const size_t * origin /* [3] */,
-                const size_t * region /* [3] */,
-                size_t input_row_pitch,
-                size_t input_slice_pitch,
-                const void * ptr,
-                cl_uint num_events_in_wait_list,
-                const cl_event * event_wait_list,
-                cl_event * event);
+                    cl_mem                  image,
+                    cl_bool                 blocking_write,
+                    const size_t *          origin /* [3] */,
+                    const size_t *          region /* [3] */,
+                    size_t                  input_row_pitch,
+                    size_t                  input_slice_pitch,
+                    const void *            ptr,
+                    cl_uint                 num_events_in_wait_list,
+                    const cl_event *        event_wait_list,
+                    cl_event *              event);
 
 cl_int clEnqueueFillImage(cl_command_queue command_queue,
-               cl_mem image,
-               const void * fill_color,
-               const size_t * origin /* [3] */,
-               const size_t * region /* [3] */,
-               cl_uint num_events_in_wait_list,
-               const cl_event * event_wait_list,
-               cl_event * event);
+                   cl_mem                   image,
+                   const void *             fill_color,
+                   const size_t *           origin /* [3] */,
+                   const size_t *           region /* [3] */,
+                   cl_uint                  num_events_in_wait_list,
+                   const cl_event *         event_wait_list,
+                   cl_event *                event);
 
 cl_int clEnqueueCopyImage(cl_command_queue command_queue,
-               cl_mem src_image,
-               cl_mem dst_image,
-               const size_t * src_origin  /* [3] */,
-               const size_t * dst_origin  /* [3] */,
-               const size_t * region  /* [3] */,
-               cl_uint num_events_in_wait_list,
-               const cl_event * event_wait_list,
-               cl_event * event);
+                   cl_mem                   src_image,
+                   cl_mem                   dst_image,
+                   const size_t *           src_origin  /* [3] */,
+                   const size_t *           dst_origin  /* [3] */,
+                   const size_t *           region  /* [3] */,
+                   cl_uint                  num_events_in_wait_list,
+                   const cl_event *         event_wait_list,
+                   cl_event *               event);
 
 cl_int clEnqueueCopyImageToBuffer(cl_command_queue command_queue,
-               cl_mem src_image,
-               cl_mem dst_buffer,
-               const size_t * origin /* [3] */,
-               const size_t * region /* [3] */,
-               size_t dst_offset,
-               cl_uint num_events_in_wait_list,
-               const cl_event * event_wait_list,
-               cl_event * event);
+                   cl_mem                   src_image,
+                   cl_mem                   dst_buffer,
+                   const size_t *           origin /* [3] */,
+                   const size_t *           region /* [3] */,
+                   size_t                   dst_offset,
+                   cl_uint                  num_events_in_wait_list,
+                   const cl_event *         event_wait_list,
+                   cl_event *               event);
 
 cl_int clEnqueueCopyBufferToImage(
                    cl_command_queue         command_queue,
@@ -676,17 +676,17 @@ void * wglGetCurrentContext(void);
 void * glXGetCurrentContext( void );
 void * glXGetCurrentDisplay( void );
 
+// EGL functions
+void * eglGetCurrentContext( void );
+void * eglGetCurrentDisplay( void );
+
+
+// extension functions and function pointers
 
 void * clGetExtensionFunctionAddressForPlatform(
     cl_platform_id platform,
  	const char *funcname );
 
-
-// extension functions and function pointers
-
-
-// typedef cl_int (*clGetGLContextInfoKHR_fn)(
-//         cl_context_properties *, cl_gl_context_info, size_t, void *, size_t *);
 
 """
 
@@ -734,14 +734,14 @@ extensions = {
 
 def initialize(
         backends=("libOpenCL.so", "OpenCL.dll", "OpenCL"),
-        gl_backends=("libGL.so", "OpenGL32.dll", "OpenGL")):    # FIXME: add EGL
+        gl_backends=("libGL.so", "OpenGL32.dll", "OpenGL")):    # FIXME: add EGL ("libEGL.so")
 
     global lib, ffi, gllib, extensions, lock
 
     with lock:
         if ffi:
             return # reinitializing never seems to be desirable.
-#            print( '<opencl4py> reinitializing ffi. Things may not work right.' )
+
         ffi = cffi.FFI()
         ffi.cdef(clsrc)
 
@@ -758,7 +758,7 @@ def initialize(
         if gllib is None:
             for fnlib in gl_backends:
                 try:
-                    gllib = ffi.dlopen(fnlib)
+                    gllib = ffi.dlopen(fnlib)   # TODO: record file name found
                     break
                 except OSError:
                     pass

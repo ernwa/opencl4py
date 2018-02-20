@@ -51,7 +51,11 @@ class Test(unittest.TestCase):
         self.old_env = os.environ.get("PYOPENCL_CTX")
         if self.old_env is None:
             os.environ["PYOPENCL_CTX"] = "0:0"
-        self.blas = blas.CLBLAS()
+        try:
+            self.blas = blas.CLBLAS()
+        except OSError:
+            raise unittest.case.SkipTest('clBlas not installed')
+
 
     def tearDown(self):
         if self.old_env is None:
