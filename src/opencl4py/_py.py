@@ -1742,7 +1742,7 @@ class Image(CL, MemObject):
 
     @classmethod
     def from_gl_texture(cls, context, flags, texture_target, miplevel, texture):
-        """Creates a 2D Image from an OpenGL texture object.
+        """Creates an Image from an OpenGL texture object.
 
         Parameters:
             flags: memory access descriptor flags.
@@ -2503,11 +2503,11 @@ class Context(CL):
         if platform is None:
             for platform in Platforms.get_ids():
                 try:
-                    return Context.from_current_gl_context(platform)
+                    return Context.from_current_gl_context(platform, egl)
                 except RuntimeError:
                     pass
             else:
-                raise RuntimeError( "Could not find any platform able to use current GL context" )
+                raise RuntimeError( "Could not find a CL platform supporting GL sharing" )
 
         if isinstance(platform, Platform):
             cl_platform = platform.handle
@@ -2515,7 +2515,8 @@ class Context(CL):
             cl_platform = platform
             platform = Platform(cl_platform)
 
-        if 'cl_khr_gl_sharing' not in platform.extensions:  # platform can return
+        if not ( 'cl_khr_gl_sharing' in platform.extensions or
+                 'cl_APPLE_gl_sharing' in platform.extensions  ):
             raise RuntimeError('Platform "%s" does not support the "cl_khr_gl_sharing" extension', platform.name)
 
         self = cls.__new__(cls)
