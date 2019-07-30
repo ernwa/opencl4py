@@ -39,7 +39,7 @@ OpenCL cffi bindings.
 """
 import cffi
 import threading
-from _cl_defines import *
+from opencl4py._cl_defines import *
 #: ffi parser
 ffi = None
 #: Loaded shared library
