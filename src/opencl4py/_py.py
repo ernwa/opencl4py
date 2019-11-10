@@ -131,6 +131,19 @@ def get_wait_list( wait_for ):
     return (wait_list, n_events)
 
 
+def get_mem_object_list( mem_objects ):
+    n_mem_objects = len(mem_objects)
+    if n_mem_objects == 0:
+        raise ValueError("Must specify at least one memory object")
+
+    mem_object_arr = cl.ffi.new("cl_mem[]", n_mem_objects)
+
+    for i, o in enumerate(mem_objects):
+        mem_object_arr[i] = o.handle
+
+    return mem_object_arr, n_mem_objects
+
+
 def wait_for_events( events, lib=None ):
     """Wait on list of Event objects.
     """
@@ -521,6 +534,8 @@ class Queue(CL):
             else:
                 if cl.CL_QUEUE_PROPERTIES not in properties and flags != 0:
                     properties[cl.CL_QUEUE_PROPERTIES] = flags
+
+
                 props = cl.ffi.new("uint64_t[]", len(properties) * 2 + 1)
                 for i, kv in enumerate(sorted(properties.items())):
                     props[i * 2] = kv[0]
@@ -529,6 +544,13 @@ class Queue(CL):
                 context.handle, device.handle, props, err)
         self.check_error(err[0], fnme, release=True)
 
+    @staticmethod
+    def _properties_list(*args):
+        args = tuple(args) + (0,)   # list terminator
+        pobj = cl.ffi.new("cl_command_queue_properties[]",len(args))
+        for i, a in enumerate(args):
+            pobj[i] = cl.ffi.cast("cl_command_queue_properties", a)
+        return pobj
 
     @classmethod
     def from_cl_queue(cls, queue_id):
@@ -553,7 +575,7 @@ class Queue(CL):
             return self._context
         except AttributeError:
             context_id = cl.ffi.new('cl_context*')
-            self._get_command_queue_info(self.handle, context_id)
+            self._get_command_queue_info(cl.CL_QUEUE_CONTEXT, context_id)
             self._context = Context.from_cl_context(context_id)
             return self._context
 
@@ -567,9 +589,22 @@ class Queue(CL):
             return self._device
         except AttributeError:
             device_id = cl.ffi.new('cl_device_id*')
-            self._get_command_queue_info(self.handle, device_id)
+            self._get_command_queue_info(cl.CL_QUEUE_DEVICE, device_id)
             self._device = Device(device_id)
             return self._device
+
+    @property
+    def flags(self):
+        """
+        command queue property flags associated with this queue.
+        """
+        try:
+            return self._flags
+        except AttributeError:
+            flags = cl.ffi.new('cl_command_queue_properties*')
+            self._get_command_queue_info(cl.CL_QUEUE_PROPERTIES, flags)
+            self._flags = flags[0]
+            return self._flags
 
 
     def execute_kernel(self, kernel, global_size, local_size=None,
@@ -604,7 +639,7 @@ class Queue(CL):
         if global_offset is None:
             global_work_offset = cl.ffi.NULL
         else:
-            if len(global_work_offset) != n_dims:
+            if len(global_offset) != n_dims:
                 raise ValueError("global_offset should be the same length "
                                  "as global_size")
             global_work_offset = cl.ffi.new("size_t[]", list(global_offset))
@@ -1126,13 +1161,13 @@ class Queue(CL):
 
         Parameters:
             buf: Buffer object.
-            pattern: a pointer to the data pattern of size pattern_size
-                     in bytes, pattern will be used to fill a region in
-                     buffer starting at offset and is size bytes in size
+            pattern: a pointer to the data pattern of size <pattern_size>
+                     in bytes, <pattern> will be used to fill a region in
+                     <buf> starting at <offset> and <size> bytes in size
                      (numpy array or direct cffi pointer).
             pattern_size: pattern size in bytes.
             size: the size in bytes of region being filled in buf
-                  and must be a multiple of pattern_size.
+                  and must be a multiple of <pattern_size>.
             wait_for: list of the Event objects to wait.
             need_event: return Event object or not.
 
@@ -1140,15 +1175,23 @@ class Queue(CL):
             Event object or None if need_event == False.
         """
         if size is None:
-            size = buf.size
+            size = buf.size - offset
+
+        if size + offset > buf.size:
+            raise ValueError('size + offset must be <= buffer size')
 
         event = cl.ffi.new("cl_event*") if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
         pattern, pattern_size = CL.extract_ptr_and_size(pattern, pattern_size)
+
+        if (size % pattern_size) != 0:
+            raise ValueError("%d bytes is not a multiple of %d bytes" % (size, pattern_size))
+
         n = self._lib.clEnqueueFillBuffer(
                 self.handle, buf.handle, pattern, pattern_size, offset,
-                size or (buf.size - offset), n_events, wait_list, event)
+                size, n_events, wait_list, event)
         self.check_error(n, "clEnqueueFillBuffer")
+
         return Event(event[0]) if event != cl.ffi.NULL else None
 
 
@@ -1276,13 +1319,10 @@ class Queue(CL):
 
         event = cl.ffi.new("cl_event*") if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
-
-        mem_object_arr = cl.ffi.new("cl_mem[]", len(mem_objects))
-        for i, o in enumerate(mem_objects):
-            mem_object_arr[i] = o.handle
+        mem_object_arr, n_mem_objects = CL.get_mem_object_list( mem_objects )
 
         err = self._lib.clEnqueueAcquireGLObjects(
-                    self.handle, len(mem_objects), mem_object_arr,
+                    self.handle, n_mem_objects, mem_object_arr,
                     n_events, wait_list, event)
         self.check_error(err, "clEnqueueAcquireGLObjects")
         return Event(event[0]) if event != cl.ffi.NULL else None
@@ -1302,46 +1342,92 @@ class Queue(CL):
 
         event = cl.ffi.new("cl_event*") if need_event else cl.ffi.NULL
         wait_list, n_events = CL.get_wait_list(wait_for)
-
-        mem_object_arr = cl.ffi.new("cl_mem[]", len(mem_objects))
-        for i, o in enumerate(mem_objects):
-            mem_object_arr[i] = o.handle
+        mem_object_arr, n_mem_objects = CL.get_mem_object_list( mem_objects )
 
         err = self._lib.clEnqueueReleaseGLObjects(
-                    self.handle, len(mem_objects), mem_object_arr,
+                    self.handle, n_mem_objects, mem_object_arr,
                     n_events, wait_list, event)
         self.check_error(err, "clEnqueueReleaseGLObjects")
         return Event(event[0]) if event != cl.ffi.NULL else None
 
 
-    def marker(self):
-        """ Create an event dependent on all previous commands
+    def migrate_mem_objects(self, mem_objects, flags=0, wait_for=None, need_event=False ):
+        """ OpenCL 1.2
+            Move memory objects between devices. This is done implicitly by commands
+            targetting those objects (writes and reads), but at undefined time.
+            This command allows manually triggering migration of multiple objects.
+
+            Flags currently specified are:
+                <none>                                  : moves <mem_objects> to the queue device
+                CL_MIGRATE_MEM_OBJECT_HOST              : moves <mem_objects> to the host
+                CL_MIGRATE_MEM_OBJECT_CONTENT_UNDEFINED : "<mem_objects> are migrated without
+                                                          incurring overhead of migrating their
+                                                          contents", whatever that means.
+        """
+        event = cl.ffi.new("cl_event*") if need_event else cl.ffi.NULL
+        wait_list, n_events = CL.get_wait_list(wait_for)
+        mem_object_list, n_mem_objects = CL.get_mem_object_list(mem_objects)
+
+        err = self._lib.clEnqueueMigrateMemObjects(
+                    self.handle, n_mem_objects, mem_object_list,
+                    flags, n_events, wait_list, event)
+        self.check_error(err, "clEnqueueMigrateMemObjects")
+        return Event(event[0]) if event != cl.ffi.NULL else None
+
+
+    def marker(self, wait_for=None):
+        """ Enqueue an event dependent on all previous commands
             issued to this queue.
         """
+        wait_list, n_events = CL.get_wait_list(wait_for)
         event = cl.ffi.new("cl_event*")
-        n = self._lib.clEnqueueMarker(self.handle, event)
-        self.check_error(n, "clEnqueueMarker")
+        if n_events:
+            n = self._lib.clEnqueueMarkerWithWaitList(self.handle, n_events, wait_list, event)
+            self.check_error(n, "clEnqueueMarkerWithWaitList")
+        else:
+            n = self._lib.clEnqueueMarker(self.handle, event)
+            self.check_error(n, "clEnqueueMarker")
         return event
 
 
-    def barrier(self):
+    def barrier(self, wait_for=None):
         """ Makes all following issued commands wait until
             previous commands in this queue complete
         """
-        n = self._lib.clEnqueueBarrier(self.handle)
-        self.check_error(n, "clEnqueueBarrier")
+        wait_list, n_events = CL.get_wait_list(wait_for)
+        if n_events:
+            event = cl.ffi.new("cl_event*")
+            n = self._lib.clEnqueueBarrierWithWaitList(self.handle)
+            self.check_error(n, "clEnqueueBarrierWithWaitList")
+            return event
+        else:
+            n = self._lib.clEnqueueBarrier(self.handle)
+            self.check_error(n, "clEnqueueBarrier")
+            return None
+
+
+    def wait_for_events(self, wait_for):
+        """ Prevents following commands issued to this queue from being
+            executed until events in <wait_for> list are completed.
+        """
+        wait_list, n_events = CL.get_wait_list(wait_for)
+        assert n_events
+        event = cl.ffi.new("cl_event*")
+        n = self._lib.clEnqueueWaitForEvents(self.handle, n_events, event_list)
+        self.check_error(n, "clEnqueueWaitForEvents")
+        return event
 
 
     def flush(self):
-        """ Waits for all previous commands issued to this queue to
-            be started on the device(s)
+        """ Blocks until all previous commands issued to this queue
+            start execution.
         """
         n = self._lib.clFlush(self.handle)
         self.check_error(n, "clFlush")
 
 
     def finish(self):
-        """ Waits for all previous commands issued to this queue to complete.
+        """ Blocks until all previous commands issued to this queue complete.
         """
         n = self._lib.clFinish(self.handle)
         self.check_error(n, "clFinish")

@@ -239,8 +239,13 @@ cl_command_queue clCreateCommandQueueWithProperties(
                                 const cl_queue_properties *properties,
                                 cl_int *errcode_ret);
 
-cl_int clReleaseCommandQueue(cl_command_queue command_queue);
+cl_int clReleaseCommandQueue(   cl_command_queue command_queue);
 
+cl_int clGetCommandQueueInfo(   cl_command_queue command_queue,
+                                cl_command_queue_info param_name,
+                                size_t param_value_size,
+                                void *param_value,
+                                size_t *param_value_size_ret );
 
 cl_int clGetMemObjectInfo(cl_mem   memobj,
                cl_mem_info         param_name,
