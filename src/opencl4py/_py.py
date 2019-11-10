@@ -1187,6 +1187,8 @@ class Queue(CL):
         if (size % pattern_size) != 0:
             raise ValueError("%d bytes is not a multiple of %d bytes" % (size, pattern_size))
 
+        #print( 'clEnqueueFillBuffer', pattern_size, offset, size )
+
         n = self._lib.clEnqueueFillBuffer(
                 self.handle, buf.handle, pattern, pattern_size, offset,
                 size, n_events, wait_list, event)
@@ -2557,9 +2559,10 @@ class Context(CL):
             return self._devices
         except AttributeError:
             sz_ids = self._get_context_info( cl.CL_CONTEXT_DEVICES, cl.ffi.NULL )
-            ids = cl.ffi.new( "cl_device_id[]", sz_ids )
+            ids = cl.ffi.new( "cl_device_id[]", sz_ids // cl.ffi.sizeof("cl_device_id") )
             sz_ret = self._get_context_info( cl.CL_CONTEXT_DEVICES, ids )
             assert sz_ret == sz_ids
+
             self._devices = [ Device(i) for i in ids ]
             return self._devices
 
@@ -2582,6 +2585,7 @@ class Context(CL):
         self._handle = context_id
         assert self.devices         # populate device list
         assert self.platform        # populate platform
+        return self
 
 
     @classmethod
@@ -2678,6 +2682,7 @@ class Context(CL):
 
     def __init__(self, platform, devices=[], properties=[]):
         self._init_empty()
+
         self._platform = platform
         devices = [ dev if not isinstance(dev, int) else
                           platform.devices[dev] for dev in devices]
@@ -2901,6 +2906,7 @@ class Context(CL):
         return Sampler(self, normalized_coords, addressing_mode, filter_mode)
 
     def _release(self):
+#        print('releasing', self.handle)
         if self.handle is not None:
             self._lib.clReleaseContext(self.handle)
             self._handle = None
@@ -3341,26 +3347,35 @@ class Platform(CL):
         return cl.ffi.string(value).decode("utf-8")
 
 
+    def get_device_ids(self, device_type=cl.CL_DEVICE_TYPE_ALL):
+        nn = cl.ffi.new("cl_uint[]", 1)
+        n = self._lib.clGetDeviceIDs(self.handle, device_type,
+                                     0, cl.ffi.NULL, nn)
+        self.check_error(n, 'clGetDeviceIDs')
+
+        ids = cl.ffi.new("cl_device_id[]", nn[0])
+        n = self._lib.clGetDeviceIDs(self.handle, device_type,
+                                     nn[0], ids, nn)
+        self.check_error(n, 'clGetDeviceIDs')
+
+        return list(Device(dev_id, self,
+                                    "%s:%d" % (self.path, dev_num))
+                             for dev_num, dev_id in enumerate(ids))
+
     @property
     def devices(self):
         """
         List of Device objects available on this platform.
         """
         if not self._devices:
-            nn = cl.ffi.new("cl_uint[]", 1)
-            n = self._lib.clGetDeviceIDs(self.handle, cl.CL_DEVICE_TYPE_ALL,
-                                         0, cl.ffi.NULL, nn)
-            self.check_error(n, 'clGetDeviceIDs')
-
-            ids = cl.ffi.new("cl_device_id[]", nn[0])
-            n = self._lib.clGetDeviceIDs(self.handle, cl.CL_DEVICE_TYPE_ALL,
-                                         nn[0], ids, nn)
-            self.check_error(n, 'clGetDeviceIDs')
-
-            self._devices = list(Device(dev_id, self,
-                                        "%s:%d" % (self.path, dev_num))
-                                 for dev_num, dev_id in enumerate(ids))
+            self._devices = self.get_device_ids()
         return self._devices
+
+
+    @property
+    def default_device(self):
+        return self.get_device_ids(cl.CL_DEVICE_TYPE_DEFAULT)
+
 
     @property
     def name(self):

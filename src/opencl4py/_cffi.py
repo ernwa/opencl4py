@@ -158,6 +158,13 @@ cl_int clGetDeviceInfo(cl_device_id device,
                        void *param_value,
                        size_t *param_value_size_ret);
 
+cl_int clGetContextInfo(cl_context context,
+                       cl_context_info param_name,
+                       size_t param_value_size,
+                       void *param_value,
+                       size_t *param_value_size_ret);
+
+
 cl_context clCreateContext(const cl_context_properties *properties,
                            cl_uint num_devices,
                            const cl_device_id *devices,
