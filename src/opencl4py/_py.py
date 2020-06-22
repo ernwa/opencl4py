@@ -2057,7 +2057,7 @@ class Kernel(CL):
         self._program = program
         self._name = name
         err = cl.ffi.new("cl_int *")
-        ss = cl.ffi.new("char[]", name.encode("utf-8"))
+        ss = cl.ffi.new("char[]", name.encode())
         self._handle = self._lib.clCreateKernel(program.handle, ss, err)
         self.check_error(err[0], "clCreateKernel", release=True)
 #            self._handle = None
@@ -2669,7 +2669,7 @@ class Context(CL):
                     sizeof_device_id, cl_device_id, size_ret)
 
             self.check_error(status, "clGetGLContextInfoKHR", release=True)
-            assert size_ret[0] == sizeof_device_id
+            assert size_ret[0] == sizeof_device_id, "size_ret[0]: %d, sizeof_device_id %d"%(size_ret[0], sizeof_device_id)
 
             self._handle = self._lib.clCreateContext(
                 gl_ctx_props, 1, cl_device_id, cl.ffi.NULL, cl.ffi.NULL, err)
@@ -3402,6 +3402,7 @@ class Platform(CL):
         return self._extensions
 
     def get_extension_function_address(self, fn_name):
+        fn_name = fn_name.encode("utf-8")
         return self._lib.clGetExtensionFunctionAddressForPlatform(self.handle, fn_name)
 
     def get_extension_function(self, fn_name):
